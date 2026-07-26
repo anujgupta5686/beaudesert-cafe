@@ -19,8 +19,11 @@ export default defineConfig({
       },
     },
   },
-  // ✅ ADD THIS - Disable CSS minification for Tailwind v4
   build: {
     cssMinify: false,
+    chunkSizeWarningLimit: 1000,
+  },
+  css: {
+    postcss: "./postcss.config.js",
   },
 })
