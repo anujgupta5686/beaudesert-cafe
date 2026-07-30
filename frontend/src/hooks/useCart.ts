@@ -1,4 +1,4 @@
-import { useAppSelector, useAppDispatch } from "@/store/hooks" // ✅ NOW EXISTS
+import { useAppSelector, useAppDispatch } from "@/store/hooks"
 import {
   addItem,
   removeItem,
@@ -6,6 +6,7 @@ import {
   clearCart,
 } from "@/store/slices/cartSlice"
 import type { MenuItem } from "@/types"
+import { buildCartKey } from "@/lib/formatPrice"
 
 export const useCart = () => {
   const dispatch = useAppDispatch()
@@ -21,10 +22,15 @@ export const useCart = () => {
     items,
     totalItems,
     totalPrice,
-    addItem: (item: MenuItem) => dispatch(addItem(item)),
-    removeItem: (id: string) => dispatch(removeItem(id)),
-    updateQuantity: (id: string, quantity: number) =>
-      dispatch(updateQuantity({ id, quantity })),
+    addItem: (item: MenuItem, size?: string | null) =>
+      dispatch(addItem({ item, size })),
+    removeItem: (cartKey: string) => dispatch(removeItem(cartKey)),
+    updateQuantity: (cartKey: string, quantity: number) =>
+      dispatch(updateQuantity({ id: cartKey, quantity })),
     clearCart: () => dispatch(clearCart()),
+    getQuantity: (id: string, size?: string | null) => {
+      const key = buildCartKey(id, size)
+      return items.find((i) => i.cartKey === key)?.quantity ?? 0
+    },
   }
 }

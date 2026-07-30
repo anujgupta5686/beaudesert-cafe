@@ -10,8 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Package, ShoppingBag, Users, TrendingUp } from "lucide-react"
+import { Package, ShoppingBag, Users, TrendingUp, Star } from "lucide-react"
 import axios from "@/api/axios"
+import { formatPrice } from "@/lib/formatPrice"
 import type { Order } from "@/types"
 
 type TabType = "products" | "orders" | "customers"
@@ -34,11 +35,13 @@ const AdminDashboard = () => {
   const { items, loading } = useAppSelector((state) => state.menu)
   const [orders, setOrders] = useState<Order[]>([])
   const [customerCount, setCustomerCount] = useState(0)
+  const [avgRating, setAvgRating] = useState(0)
+  const [feedbackCount, setFeedbackCount] = useState(0)
   const [activeTab, setActiveTab] = useState<TabType>("products")
   const [loadingData, setLoadingData] = useState(true)
 
   useEffect(() => {
-    dispatch(fetchMenu())
+    dispatch(fetchMenu({ includeUnavailable: true }))
     fetchOrdersAndCustomers()
   }, [dispatch])
 
@@ -50,6 +53,15 @@ const AdminDashboard = () => {
 
       const customerResponse = await axios.get("/orders/customers/count")
       setCustomerCount(customerResponse.data.data.totalCustomers)
+
+      try {
+        const feedbackRes = await axios.get("/feedback/analytics")
+        setAvgRating(feedbackRes.data.data?.averageRating || 0)
+        setFeedbackCount(feedbackRes.data.data?.totalFeedback || 0)
+      } catch {
+        // analytics optional if no feedback yet
+      }
+
       setLoadingData(false)
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -108,6 +120,14 @@ const AdminDashboard = () => {
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
       tab: "customers" as TabType,
+    },
+    {
+      title: "Avg Feedback",
+      value: feedbackCount ? `${avgRating}★ (${feedbackCount})` : "—",
+      icon: Star,
+      color: "text-amber-500",
+      bgColor: "bg-amber-500/10",
+      tab: "orders" as TabType,
     },
   ]
 
@@ -174,7 +194,7 @@ const AdminDashboard = () => {
                       {product.count}
                     </TableCell>
                     <TableCell className="text-right font-semibold text-primary">
-                      ₹{product.revenue}
+                      {formatPrice(product.revenue)}
                     </TableCell>
                   </TableRow>
                 ))
@@ -219,7 +239,7 @@ const AdminDashboard = () => {
                     </TableCell>
                     <TableCell>{order.items.length} items</TableCell>
                     <TableCell className="text-right font-semibold text-primary">
-                      ₹{order.totalAmount}
+                      {formatPrice(order.totalAmount)}
                     </TableCell>
                   </TableRow>
                 ))
@@ -266,7 +286,7 @@ const AdminDashboard = () => {
                       {customer.totalOrders}
                     </TableCell>
                     <TableCell className="text-right font-semibold text-primary">
-                      ₹{customer.totalSpent}
+                      {formatPrice(customer.totalSpent)}
                     </TableCell>
                   </TableRow>
                 ))

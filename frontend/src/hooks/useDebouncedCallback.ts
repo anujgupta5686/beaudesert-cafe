@@ -1,0 +1,29 @@
+import { useEffect, useRef } from "react"
+
+/**
+ * Debounce a callback — cancels previous timer on each call.
+ */
+export function useDebouncedCallback<T extends (...args: never[]) => void>(
+  callback: T,
+  delay = 400
+) {
+  const callbackRef = useRef(callback)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    callbackRef.current = callback
+  }, [callback])
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  return ((...args: Parameters<T>) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      callbackRef.current(...args)
+    }, delay)
+  }) as T
+}

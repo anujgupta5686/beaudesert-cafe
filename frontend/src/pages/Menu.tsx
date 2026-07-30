@@ -1,79 +1,156 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { fetchMenu } from "@/store/slices/menuSlice"
 import { useCart } from "@/hooks/useCart"
+import { useCartQuantity } from "@/hooks/useCartQuantity"
 import MenuCard from "@/components/shared/MenuCard"
+import { ProductDetailDialog } from "@/components/shared/ProductDetailDialog"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { Search } from "lucide-react"
+import axios from "@/api/axios"
+import type { Category, MenuItem } from "@/types"
 
 const Menu = () => {
   const dispatch = useAppDispatch()
   const { items, loading } = useAppSelector((state) => state.menu)
-  const { addItem } = useCart()
+  const { addItem, updateQuantity } = useCart()
+  const { getQuantity } = useCartQuantity()
   const [searchTerm, setSearchTerm] = useState("")
+  const [activeCategory, setActiveCategory] = useState("all")
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   useEffect(() => {
     dispatch(fetchMenu())
+    axios
+      .get("/categories")
+      .then((res) => setCategories(res.data.data || []))
+      .catch(() => setCategories([]))
   }, [dispatch])
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.description.toLowerCase().includes(searchTerm.toLowerCase())
+
+      if (!matchesSearch) return false
+      if (activeCategory === "all") return true
+      if (activeCategory === "combo") return item.productType === "combo"
+
+      const cat =
+        typeof item.category === "object" && item.category
+          ? item.category.slug
+          : null
+      return cat === activeCategory
+    })
+  }, [items, searchTerm, activeCategory])
+
+  const filters = [
+    { key: "all", label: "All" },
+    ...categories.map((c) => ({ key: c.slug, label: c.name })),
+    { key: "combo", label: "Combos" },
+  ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 py-8 md:py-12">
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/30 py-10 md:py-14">
       <div className="container mx-auto px-4">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="mb-2 text-3xl font-bold md:text-4xl">Our Menu</h1>
+        <motion.div
+          className="mb-10 text-center"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <h1 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">
+            Our Menu
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Handcrafted with love, served with a smile
+            Filter by category or search your favorites
           </p>
-        </div>
+        </motion.div>
 
-        {/* Search Bar */}
-        <div className="mx-auto mb-8 max-w-xs">
+        <div className="mx-auto mb-6 max-w-md">
           <div className="relative">
             <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search menu..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 pl-9 text-sm"
+              className="h-11 rounded-xl border-muted-foreground/20 pl-10 shadow-sm"
             />
           </div>
         </div>
 
-        {/* Menu Grid */}
+        <div className="mb-8 flex flex-wrap justify-center gap-2">
+          {filters.map((filter) => (
+            <Button
+              key={filter.key}
+              size="sm"
+              variant={activeCategory === filter.key ? "default" : "outline"}
+              className="h-9 rounded-full px-4"
+              onClick={() => setActiveCategory(filter.key)}
+            >
+              {filter.label}
+            </Button>
+          ))}
+        </div>
+
         {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="flex flex-col items-center gap-2">
-              <div className="h-6 w-6 animate-spin rounded-full border-3 border-primary border-t-transparent" />
-              <span className="text-xs text-muted-foreground">Loading...</span>
-            </div>
+          <div className="flex justify-center py-16">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="rounded-2xl border border-dashed py-16 text-center text-sm text-muted-foreground">
+            {searchTerm
+              ? "No items match your search"
+              : "No items available yet."}
           </div>
         ) : (
-          <>
-            {filteredItems.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {searchTerm
-                    ? "No items match your search"
-                    : "No items available yet."}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                {filteredItems.map((item) => (
-                  <MenuCard key={item._id} item={item} onAddToCart={addItem} />
-                ))}
-              </div>
-            )}
-          </>
+          <AnimatePresence mode="popLayout">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {filteredItems.map((item, i) => {
+                const size = item.hasVariants
+                  ? item.variants?.find((v) => v.isDefault)?.label ||
+                    item.variants?.[0]?.label
+                  : null
+                return (
+                  <motion.div
+                    key={item._id}
+                    layout
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                  >
+                    <MenuCard
+                      item={item}
+                      onAddToCart={addItem}
+                      quantity={getQuantity(item._id, size)}
+                      onUpdateQuantity={updateQuantity}
+                      onClick={() => {
+                        setSelectedItem(item)
+                        setDialogOpen(true)
+                      }}
+                    />
+                  </motion.div>
+                )
+              })}
+            </div>
+          </AnimatePresence>
         )}
       </div>
+
+      <ProductDetailDialog
+        item={selectedItem}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        getQuantity={getQuantity}
+        onAdd={addItem}
+        onUpdateQuantity={updateQuantity}
+      />
     </div>
   )
 }

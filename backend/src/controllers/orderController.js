@@ -1,230 +1,265 @@
 const Order = require('../models/Order');
 const Menu = require('../models/Menu');
-const { sendEmail } = require('../utils/email');
+const emailService = require('../services/emailService');
+const feedbackService = require('../services/feedbackService');
+const { generateOrderNumber } = require('../utils/orderNumber');
+const logger = require('../utils/logger');
 
-// ============================================
-// ✅ SEND ORDER EMAIL - Using existing email utility
-// ============================================
-const sendOrderEmail = async (order) => {
-    console.log('📧 Sending order email...');
-
-    try {
-        const subject = `🆕 New Order - ${order.customerName}`;
-
-        const html = `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #b45309;">☕ New Order Received!</h2>
-                
-                <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Customer Details:</h3>
-                    <p><strong>Name:</strong> ${order.customerName}</p>
-                    <p><strong>Mobile:</strong> ${order.mobile}</p>
-                    <p><strong>Address:</strong> ${order.address}</p>
-                    ${order.specialInstructions ? `<p><strong>Special Instructions:</strong> ${order.specialInstructions}</p>` : ''}
-                </div>
-                
-                <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Order Items:</h3>
-                    <ul style="list-style: none; padding: 0;">
-                        ${order.items.map(item =>
-            `<li style="padding: 5px 0; border-bottom: 1px solid #fcd34d;">
-                                ${item.name} × ${item.quantity} = ₹${item.price * item.quantity}
-                            </li>`
-        ).join('')}
-                    </ul>
-                    <h3 style="color: #b45309;">Total Amount: ₹${order.totalAmount}</h3>
-                </div>
-                
-                <p style="color: #6b7280; font-size: 14px;">
-                    Order placed on: ${new Date(order.createdAt).toLocaleString()}
-                </p>
-            </div>
-        `;
-
-        // ✅ Using existing sendEmail function from utils/email.js
-        await sendEmail(process.env.ADMIN_EMAIL, subject, html);
-        console.log('✅ Order email sent to admin');
-    } catch (error) {
-        console.error('❌ Email sending failed:', error);
-        // Email fails silently - Order is already saved in database
-    }
+const resolveUnitPrice = (menuItem, size) => {
+  if (menuItem.productType === 'combo') return menuItem.price;
+  if (size && menuItem.hasVariants && menuItem.variants?.length) {
+    const variant = menuItem.variants.find((v) => v.label === size);
+    if (variant) return variant.price;
+  }
+  return menuItem.price;
 };
 
-// ============================================
-// ✅ CREATE ORDER
-// ============================================
 exports.createOrder = async (req, res) => {
-    console.log('📝 CREATE ORDER - Request received');
-    console.log('📝 Request body:', req.body);
+  try {
+    const {
+      customerName,
+      email,
+      mobile,
+      address,
+      specialInstructions,
+      items,
+    } = req.body;
 
-    try {
-        const { customerName, mobile, address, specialInstructions, items, totalAmount } = req.body;
-
-        // Validate required fields
-        if (!customerName || !mobile || !address || !items || !totalAmount) {
-            console.log('❌ Missing required fields');
-            return res.status(400).json({
-                success: false,
-                message: 'All fields are required'
-            });
-        }
-
-        // Validate items exist
-        console.log('🔍 Validating items...');
-        for (const item of items) {
-            const menuItem = await Menu.findById(item.menuItemId);
-            if (!menuItem) {
-                console.log('❌ Item not found:', item.name);
-                return res.status(404).json({
-                    success: false,
-                    message: `Item "${item.name}" not found`
-                });
-            }
-        }
-        console.log('✅ All items validated');
-
-        // Create order
-        const order = await Order.create({
-            customerName,
-            mobile,
-            address,
-            specialInstructions: specialInstructions || '',
-            items: items.map(item => ({
-                menuItemId: item.menuItemId,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity || 1
-            })),
-            totalAmount,
-            status: 'pending'
-        });
-
-        console.log('✅ Order created:', order._id);
-
-        // ✅ SEND EMAIL IN BACKGROUND (Don't wait for it)
-        // Even if email fails, order is already saved
-        sendOrderEmail(order);
-
-        // ✅ Respond immediately to frontend
-        res.status(201).json({
-            success: true,
-            data: order,
-            message: 'Order placed successfully!'
-        });
-
-    } catch (error) {
-        console.error('❌ Create order error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to place order'
-        });
+    if (!customerName || !email || !mobile || !address || !items?.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields are required',
+      });
     }
+
+    const validatedItems = [];
+    let totalAmount = 0;
+
+    for (const item of items) {
+      const menuItem = await Menu.findById(item.menuItemId);
+      if (!menuItem) {
+        return res.status(404).json({
+          success: false,
+          message: `Item "${item.name}" not found`,
+        });
+      }
+
+      if (menuItem.isAvailable === false) {
+        return res.status(400).json({
+          success: false,
+          message: `"${menuItem.name}" is currently unavailable`,
+        });
+      }
+
+      const size = item.size || null;
+      if (menuItem.hasVariants && menuItem.variants?.length && !size) {
+        return res.status(400).json({
+          success: false,
+          message: `Please select a size for "${menuItem.name}"`,
+        });
+      }
+
+      const unitPrice = resolveUnitPrice(menuItem, size);
+      const quantity = item.quantity || 1;
+      totalAmount += unitPrice * quantity;
+
+      const displayName =
+        size && menuItem.productType !== 'combo'
+          ? `${menuItem.name} (${size})`
+          : menuItem.name;
+
+      validatedItems.push({
+        menuItemId: menuItem._id,
+        name: displayName,
+        price: unitPrice,
+        quantity,
+        image: menuItem.image || '',
+        size,
+        productType: menuItem.productType || 'normal',
+      });
+    }
+
+    let order;
+    let attempts = 0;
+    while (attempts < 5) {
+      try {
+        order = await Order.create({
+          orderNumber: generateOrderNumber(),
+          customerName,
+          email,
+          mobile,
+          address,
+          specialInstructions: specialInstructions || '',
+          items: validatedItems,
+          totalAmount,
+          status: 'pending',
+        });
+        break;
+      } catch (err) {
+        if (err.code === 11000) {
+          attempts += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!order) {
+      return res.status(500).json({
+        success: false,
+        message: 'Could not generate unique order ID',
+      });
+    }
+
+    emailService.sendOrderConfirmationToUser(order);
+    emailService.sendOrderNotificationToAdmin(order);
+
+    res.status(201).json({
+      success: true,
+      data: order,
+      message: 'Order placed successfully!',
+    });
+  } catch (error) {
+    logger.error('Create order error', { error: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to place order',
+    });
+  }
 };
 
-// ============================================
-// ✅ GET ALL ORDERS (Admin)
-// ============================================
+/**
+ * Backend search + pagination + sorting
+ * Query: ?search=&status=&page=&limit=&sortBy=&sortOrder=
+ */
 exports.getOrders = async (req, res) => {
-    console.log('📝 GET ALL ORDERS - Request received');
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const skip = (page - 1) * limit;
+    const search = (req.query.search || '').trim();
+    const status = req.query.status;
+    const sortBy = ['createdAt', 'totalAmount', 'customerName', 'orderNumber', 'status'].includes(
+      req.query.sortBy
+    )
+      ? req.query.sortBy
+      : 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
-    try {
-        const orders = await Order.find().sort({ createdAt: -1 });
-        console.log('✅ Found', orders.length, 'orders');
-        res.json({ success: true, data: orders });
-    } catch (error) {
-        console.error('❌ Get orders error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+    const filter = {};
+    if (status === 'pending' || status === 'success') {
+      filter.status = status;
     }
+    if (search) {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [
+        { orderNumber: regex },
+        { customerName: regex },
+        { email: regex },
+        { mobile: regex },
+      ];
+    }
+
+    const [orders, total] = await Promise.all([
+      Order.find(filter)
+        .sort({ [sortBy]: sortOrder })
+        .skip(skip)
+        .limit(limit),
+      Order.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      data: orders,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+        sortBy,
+        sortOrder: sortOrder === 1 ? 'asc' : 'desc',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
-// ============================================
-// ✅ GET CUSTOMER COUNT
-// ============================================
+exports.getOrder = async (req, res) => {
+  try {
+    const order =
+      (await Order.findOne({ orderNumber: req.params.id.toUpperCase() })) ||
+      (await Order.findById(req.params.id).catch(() => null));
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    res.json({ success: true, data: order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.getCustomerCount = async (req, res) => {
-    console.log('📝 GET CUSTOMER COUNT - Request received');
+  try {
+    const customers = await Order.aggregate([
+      {
+        $group: {
+          _id: { customerName: '$customerName', mobile: '$mobile' },
+        },
+      },
+      { $count: 'totalCustomers' },
+    ]);
 
-    try {
-        const customers = await Order.aggregate([
-            {
-                $group: {
-                    _id: {
-                        customerName: '$customerName',
-                        mobile: '$mobile'
-                    }
-                }
-            },
-            {
-                $count: 'totalCustomers'
-            }
-        ]);
-
-        const totalCustomers = customers.length > 0 ? customers[0].totalCustomers : 0;
-        console.log('✅ Total unique customers:', totalCustomers);
-
-        res.json({
-            success: true,
-            data: { totalCustomers }
-        });
-    } catch (error) {
-        console.error('❌ Get customer count error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
+    const totalCustomers = customers[0]?.totalCustomers || 0;
+    res.json({ success: true, data: { totalCustomers } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
-// ============================================
-// ✅ UPDATE ORDER STATUS (Admin)
-// ============================================
 exports.updateOrderStatus = async (req, res) => {
-    console.log('📝 UPDATE ORDER STATUS - Request received');
-    console.log('📝 Order ID:', req.params.id);
-    console.log('📝 New Status:', req.body.status);
+  try {
+    const { status } = req.body;
+    const orderId = req.params.id;
 
-    try {
-        const { status } = req.body;
-        const orderId = req.params.id;
-
-        if (!['pending', 'success'].includes(status)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid status. Must be "pending" or "success"'
-            });
-        }
-
-        const order = await Order.findById(orderId);
-        if (!order) {
-            return res.status(404).json({
-                success: false,
-                message: 'Order not found'
-            });
-        }
-
-        if (order.status === 'success') {
-            return res.status(400).json({
-                success: false,
-                message: 'Order already marked as success'
-            });
-        }
-
-        order.status = status;
-        await order.save();
-
-        console.log('✅ Order status updated:', order._id, '->', status);
-        res.json({
-            success: true,
-            message: 'Order status updated successfully',
-            data: order
-        });
-    } catch (error) {
-        console.error('❌ Update order status error:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+    if (!['pending', 'success'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be "pending" or "success"',
+      });
     }
+
+    const order =
+      (await Order.findById(orderId).catch(() => null)) ||
+      (await Order.findOne({ orderNumber: orderId }));
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.status === 'success') {
+      return res.status(400).json({
+        success: false,
+        message: 'Order already marked as success',
+      });
+    }
+
+    order.status = status;
+    await order.save();
+
+    if (status === 'success') {
+      feedbackService.createAndEmail(order).catch((err) =>
+        logger.error('Feedback email failed', { error: err.message })
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Order status updated successfully',
+      data: order,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };

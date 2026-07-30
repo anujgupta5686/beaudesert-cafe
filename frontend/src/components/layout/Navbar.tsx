@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
+import { AnimatePresence, motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Coffee, ShoppingCart, Menu as MenuIcon, X } from "lucide-react"
@@ -6,63 +7,69 @@ import { useCart } from "@/hooks/useCart"
 import { useAuth } from "@/hooks/useAuth"
 import { ThemeToggle } from "@/components/shared/ThemeToggle"
 import { useState } from "react"
+import { cn } from "@/lib/utils"
+
+const navLinks = [
+  { to: "/", label: "Home" },
+  { to: "/menu", label: "Menu" },
+  { to: "/contact", label: "Contact" },
+]
 
 const Navbar = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { totalItems } = useCart()
   const { isAuthenticated } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
+  const links = isAuthenticated
+    ? [...navLinks, { to: "/admin/dashboard", label: "Dashboard" }]
+    : navLinks
+
   return (
-    <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <nav className="sticky top-0 z-50 border-b bg-background/90 backdrop-blur-md">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
           <Link to="/" className="flex shrink-0 items-center gap-2">
-            <Coffee className="h-6 w-6 text-primary" />
-            <span className="text-lg font-bold md:text-xl">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+              <Coffee className="h-5 w-5 text-primary" />
+            </span>
+            <span className="text-lg font-bold tracking-tight md:text-xl">
               Beaudesert Cafe
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden items-center gap-6 md:flex">
-            <Link
-              to="/"
-              className="text-sm font-medium transition-colors hover:text-primary"
-            >
-              Home
-            </Link>
-            <Link
-              to="/menu"
-              className="text-sm font-medium transition-colors hover:text-primary"
-            >
-              Menu
-            </Link>
-            {isAuthenticated && (
+          <div className="hidden items-center gap-1 md:flex">
+            {links.map((link) => (
               <Link
-                to="/admin/dashboard"
-                className="text-sm font-medium transition-colors hover:text-primary"
+                key={link.to}
+                to={link.to}
+                className={cn(
+                  "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  location.pathname === link.to
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
               >
-                Dashboard
+                {link.label}
               </Link>
-            )}
+            ))}
           </div>
 
-          {/* Right side */}
-          <div className="flex items-center gap-2 md:gap-4">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <ThemeToggle />
 
             <Button
               variant="ghost"
               size="icon"
-              className="relative"
+              className="relative rounded-xl"
               onClick={() => navigate("/cart")}
+              aria-label="Open cart"
             >
               <ShoppingCart className="h-5 w-5" />
               {totalItems > 0 && (
-                <Badge className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary p-0 text-xs text-primary-foreground">
-                  {totalItems}
+                <Badge className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px]">
+                  {totalItems > 99 ? "99+" : totalItems}
                 </Badge>
               )}
             </Button>
@@ -70,8 +77,10 @@ const Navbar = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="rounded-xl md:hidden"
+              onClick={() => setIsMobileMenuOpen((v) => !v)}
+              aria-expanded={isMobileMenuOpen}
+              aria-label="Toggle menu"
             >
               {isMobileMenuOpen ? (
                 <X className="h-5 w-5" />
@@ -82,36 +91,34 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* Mobile Navigation */}
-        {isMobileMenuOpen && (
-          <div className="border-t py-4 md:hidden">
-            <div className="flex flex-col gap-3">
-              <Link
-                to="/"
-                className="text-sm font-medium transition-colors hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Home
-              </Link>
-              <Link
-                to="/menu"
-                className="text-sm font-medium transition-colors hover:text-primary"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Menu
-              </Link>
-              {isAuthenticated && (
-                <Link
-                  to="/admin/dashboard"
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
-              )}
-            </div>
-          </div>
-        )}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden border-t md:hidden"
+            >
+              <div className="flex flex-col gap-1 py-3">
+                {links.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={cn(
+                      "rounded-lg px-3 py-2.5 text-sm font-medium",
+                      location.pathname === link.to
+                        ? "bg-primary/10 text-primary"
+                        : "hover:bg-muted"
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </nav>
   )

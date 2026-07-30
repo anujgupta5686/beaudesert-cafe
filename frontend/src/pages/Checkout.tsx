@@ -1,14 +1,16 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useCart } from "@/hooks/useCart"
+import { formatPrice } from "@/lib/formatPrice"
 import { ArrowLeft } from "lucide-react"
 import axios from "@/api/axios"
 import { toast } from "sonner"
+import { useState } from "react"
 
 const Checkout = () => {
   const navigate = useNavigate()
@@ -16,18 +18,20 @@ const Checkout = () => {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     customerName: "",
+    email: "",
     mobile: "",
     address: "",
     specialInstructions: "",
   })
 
+  if (items.length === 0) {
+    return <Navigate to="/cart" replace />
+  }
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
+    setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,34 +45,35 @@ const Checkout = () => {
           menuItemId: item._id,
           name: item.name,
           price: item.price,
-          quantity: item.quantity, // ✅ SEND QUANTITY
+          quantity: item.quantity,
+          image: item.image,
+          size: item.size || null,
+          productType: item.productType || "normal",
         })),
-        totalAmount: totalPrice,
       }
 
-      await axios.post("/orders", orderData)
-      clearCart()
-      toast.success(
-        "🎉 Order placed successfully! Check your email for confirmation."
-      )
-      navigate("/")
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.message ||
-          "Failed to place order. Please try again."
-      )
+      const response = await axios.post("/orders", orderData)
+
+      if (response.data.success) {
+        clearCart()
+        toast.success(
+          "Order placed successfully! Check your email for confirmation."
+        )
+        navigate("/")
+      }
+    } catch (error: unknown) {
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Failed to place order. Please try again."
+      toast.error(message)
     } finally {
       setLoading(false)
     }
   }
 
-  if (items.length === 0) {
-    navigate("/cart")
-    return null
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 py-12">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 py-10 md:py-14">
       <div className="container mx-auto max-w-3xl px-4">
         <Button
           variant="ghost"
@@ -79,107 +84,131 @@ const Checkout = () => {
           Back to Cart
         </Button>
 
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="rounded-t-lg border-b bg-primary/5">
-            <CardTitle className="text-3xl">Checkout</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Fill in your details to place your order
-            </p>
-          </CardHeader>
-          <CardContent className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="customerName" className="text-sm font-medium">
-                  Full Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="customerName"
-                  name="customerName"
-                  required
-                  placeholder="John Doe"
-                  value={formData.customerName}
-                  onChange={handleChange}
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="mobile" className="text-sm font-medium">
-                  Mobile Number <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="mobile"
-                  name="mobile"
-                  type="tel"
-                  required
-                  placeholder="9876543210"
-                  value={formData.mobile}
-                  onChange={handleChange}
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="address" className="text-sm font-medium">
-                  Delivery Address <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="address"
-                  name="address"
-                  required
-                  placeholder="123 Main Street, City, State - 123456"
-                  value={formData.address}
-                  onChange={handleChange}
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="specialInstructions"
-                  className="text-sm font-medium"
-                >
-                  Special Instructions
-                </Label>
-                <Textarea
-                  id="specialInstructions"
-                  name="specialInstructions"
-                  placeholder="Any special requests... (e.g. Extra sugar, No onions, etc.)"
-                  value={formData.specialInstructions}
-                  onChange={handleChange}
-                  rows={3}
-                  className="resize-none"
-                />
-              </div>
-
-              {/* Order Summary */}
-              <div className="space-y-2 rounded-lg bg-muted/50 p-4">
-                <h4 className="font-semibold">Order Summary</h4>
-                {items.map((item) => (
-                  <div key={item._id} className="flex justify-between text-sm">
-                    <span>
-                      {item.name} × {item.quantity}
-                    </span>
-                    <span>₹{item.price * item.quantity}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between border-t pt-2 text-lg font-bold">
-                  <span>Total:</span>
-                  <span className="text-primary">₹{totalPrice}</span>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card className="overflow-hidden border shadow-md">
+            <CardHeader className="border-b bg-muted/30">
+              <CardTitle className="text-2xl tracking-tight md:text-3xl">
+                Checkout
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Enter your details to complete the order
+              </p>
+            </CardHeader>
+            <CardContent className="p-6">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="customerName">
+                    Full Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="customerName"
+                    name="customerName"
+                    required
+                    placeholder="John Doe"
+                    value={formData.customerName}
+                    onChange={handleChange}
+                  />
                 </div>
-              </div>
 
-              <Button
-                type="submit"
-                className="h-12 w-full text-base font-semibold"
-                size="lg"
-                disabled={loading}
-              >
-                {loading ? "Placing Order..." : "Place Order"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">
+                      Email <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="john@example.com"
+                      value={formData.email}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="mobile">
+                      Mobile <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="mobile"
+                      name="mobile"
+                      type="tel"
+                      required
+                      placeholder="9876543210"
+                      value={formData.mobile}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address">
+                    Delivery Address <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="address"
+                    name="address"
+                    required
+                    placeholder="123 Main Street, City"
+                    value={formData.address}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="specialInstructions">
+                    Special Instructions
+                  </Label>
+                  <Textarea
+                    id="specialInstructions"
+                    name="specialInstructions"
+                    placeholder="Any special requests..."
+                    value={formData.specialInstructions}
+                    onChange={handleChange}
+                    rows={3}
+                    className="resize-none"
+                  />
+                </div>
+
+                <div className="space-y-3 rounded-xl border bg-muted/40 p-4">
+                  <h4 className="text-sm font-semibold">Order Summary</h4>
+                  {items.map((item) => (
+                    <div
+                      key={item.cartKey}
+                      className="flex justify-between text-sm"
+                    >
+                      <span className="text-muted-foreground">
+                        {item.name}
+                        {item.size ? ` (${item.size})` : ""} × {item.quantity}
+                      </span>
+                      <span className="font-medium">
+                        {formatPrice(item.price * item.quantity)}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between border-t pt-3 text-lg font-bold">
+                    <span>Total</span>
+                    <span className="text-primary">
+                      {formatPrice(totalPrice)}
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="h-12 w-full text-base font-semibold"
+                  size="lg"
+                  disabled={loading}
+                >
+                  {loading ? "Placing Order..." : "Place Order"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
     </div>
   )
