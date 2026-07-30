@@ -16,14 +16,22 @@ const initialState: MenuState = {
 
 export const fetchMenu = createAsyncThunk(
   "menu/fetch",
-  async (_, { rejectWithValue }) => {
+  async (
+    options: { includeUnavailable?: boolean } | undefined,
+    { rejectWithValue }
+  ) => {
     try {
-      const response = await axios.get("/menu")
+      const params = options?.includeUnavailable
+        ? { includeUnavailable: "true" }
+        : undefined
+      const response = await axios.get("/menu", { params })
       return response.data.data
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.message || "Failed to fetch menu"
-      )
+    } catch (error: unknown) {
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Failed to fetch menu"
+      return rejectWithValue(message)
     }
   }
 )
