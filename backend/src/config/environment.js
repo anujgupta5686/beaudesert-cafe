@@ -54,7 +54,16 @@ const env = {
   isLocal,
   isHosted,
 
-  mongodbUri: process.env.MONGODB_URI,
+  /**
+   * Active MongoDB connection string.
+   * Use MONGODB_URI for local + development.
+   * When client gives production Atlas URI later, set MONGODB_URI_PRODUCTION
+   * on the prod host (or swap MONGODB_URI) — see .env.example.
+   */
+  mongodbUri:
+    appEnv === 'production' && process.env.MONGODB_URI_PRODUCTION
+      ? process.env.MONGODB_URI_PRODUCTION
+      : process.env.MONGODB_URI,
 
   jwt: {
     secret: process.env.JWT_SECRET,

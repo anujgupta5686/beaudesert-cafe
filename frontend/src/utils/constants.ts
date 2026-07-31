@@ -1,3 +1,8 @@
+/**
+ * API base URL — always points at the backend for the current environment.
+ * Local:  `.env.development` → http://localhost:5000/api
+ * Dev/Prod: set `VITE_API_URL` on the host (Vercel). Never hardcode cafe data in the UI.
+ */
 export const API_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000/api"
 
