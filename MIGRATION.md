@@ -81,13 +81,40 @@ npm install bullmq ioredis
 # set REDIS_URL in .env
 ```
 
-## Enable AWS S3 (optional)
+## Enable AWS S3 (production / EC2)
 
 ```bash
-npm install @aws-sdk/client-s3
-# set STORAGE_PROVIDER=s3 and AWS_* vars
-# uncomment code in src/services/storageService.js
+cd backend
+npm install   # includes @aws-sdk/client-s3
 ```
+
+In `.env` (or EC2 environment):
+
+```
+APP_ENV=production
+NODE_ENV=production
+STORAGE_PROVIDER=s3
+AWS_REGION=us-east-1
+AWS_S3_BUCKET=your-bucket-name
+# Optional: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+# Or attach an IAM role on EC2 (preferred)
+# Optional CDN: AWS_S3_PUBLIC_URL=https://cdn.yourdomain.com
+AWS_S3_KEY_PREFIX=beaudesert-cafe
+BACKEND_URL=https://api.yourdomain.com
+FRONTEND_URL=https://yourdomain.com
+```
+
+No code changes — only env. Bucket needs public-read policy for objects (or CloudFront).
+
+## Storage switch (all environments)
+
+| Where | `STORAGE_PROVIDER` | Notes |
+|-------|--------------------|-------|
+| Local Windows | `local` | Files under `backend/uploads` |
+| Render / shared dev | `cloudinary` or `s3` | Ephemeral disk — don't use `local` on Render |
+| AWS EC2 | `s3` | Recommended for production images/files |
+
+Frontend only needs `VITE_API_URL` pointed at that environment's API.
 
 ## Deploy
 

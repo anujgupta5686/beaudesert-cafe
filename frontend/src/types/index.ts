@@ -25,6 +25,7 @@ export type MenuItem = {
   description: string
   price: number
   image: string
+  images?: string[]
   category?: Category | string | null
   productType?: "normal" | "combo"
   hasVariants?: boolean
@@ -49,6 +50,8 @@ export type CartItem = {
   size?: string | null
   productType?: "normal" | "combo"
   originalPrice?: number
+  hasVariants?: boolean
+  variants?: ProductVariant[]
 }
 
 export type OrderItem = {

@@ -15,7 +15,7 @@ import axios from "@/api/axios"
 import { formatPrice } from "@/lib/formatPrice"
 import type { Order } from "@/types"
 
-type TabType = "products" | "orders" | "customers"
+type TabType = "products" | "orders" | "customers" | "feedback"
 
 interface ProductStats {
   name: string
@@ -30,13 +30,24 @@ interface CustomerStats {
   totalSpent: number
 }
 
+interface FeedbackRow {
+  _id: string
+  customerName?: string
+  email?: string
+  overallRating?: number
+  overallComment?: string
+  submittedAt?: string
+}
+
 const AdminDashboard = () => {
   const dispatch = useAppDispatch()
   const { items, loading } = useAppSelector((state) => state.menu)
   const [orders, setOrders] = useState<Order[]>([])
+  const [orderTotal, setOrderTotal] = useState(0)
   const [customerCount, setCustomerCount] = useState(0)
   const [avgRating, setAvgRating] = useState(0)
   const [feedbackCount, setFeedbackCount] = useState(0)
+  const [recentFeedback, setRecentFeedback] = useState<FeedbackRow[]>([])
   const [activeTab, setActiveTab] = useState<TabType>("products")
   const [loadingData, setLoadingData] = useState(true)
 
@@ -48,8 +59,16 @@ const AdminDashboard = () => {
   const fetchOrdersAndCustomers = async () => {
     try {
       setLoadingData(true)
-      const ordersResponse = await axios.get("/orders")
-      setOrders(ordersResponse.data.data)
+      const ordersResponse = await axios.get("/orders", {
+        params: { limit: 50, sortBy: "createdAt", sortOrder: "desc" },
+      })
+      const orderList = Array.isArray(ordersResponse.data.data)
+        ? ordersResponse.data.data
+        : []
+      setOrders(orderList)
+      setOrderTotal(
+        Number(ordersResponse.data.meta?.total ?? orderList.length) || 0
+      )
 
       const customerResponse = await axios.get("/orders/customers/count")
       setCustomerCount(customerResponse.data.data.totalCustomers)
@@ -58,6 +77,7 @@ const AdminDashboard = () => {
         const feedbackRes = await axios.get("/feedback/analytics")
         setAvgRating(feedbackRes.data.data?.averageRating || 0)
         setFeedbackCount(feedbackRes.data.data?.totalFeedback || 0)
+        setRecentFeedback(feedbackRes.data.data?.recent || [])
       } catch {
         // analytics optional if no feedback yet
       }
@@ -69,20 +89,18 @@ const AdminDashboard = () => {
     }
   }
 
-  // Get top 10 products by order count
   const getTopProducts = (): ProductStats[] => {
-    const productCount: {
-      [key: string]: ProductStats
-    } = {}
+    const productCount: { [key: string]: ProductStats } = {}
 
     orders.forEach((order) => {
       order.items.forEach((item) => {
         const quantity = item.quantity || 1
-        if (productCount[item.menuItemId]) {
-          productCount[item.menuItemId].count += quantity
-          productCount[item.menuItemId].revenue += item.price * quantity
+        const key = item.menuItemId || item.name
+        if (productCount[key]) {
+          productCount[key].count += quantity
+          productCount[key].revenue += item.price * quantity
         } else {
-          productCount[item.menuItemId] = {
+          productCount[key] = {
             name: item.name,
             count: quantity,
             revenue: item.price * quantity,
@@ -107,7 +125,7 @@ const AdminDashboard = () => {
     },
     {
       title: "Total Orders",
-      value: orders.length,
+      value: orderTotal,
       icon: ShoppingBag,
       color: "text-green-500",
       bgColor: "bg-green-500/10",
@@ -127,13 +145,12 @@ const AdminDashboard = () => {
       icon: Star,
       color: "text-amber-500",
       bgColor: "bg-amber-500/10",
-      tab: "orders" as TabType,
+      tab: "feedback" as TabType,
     },
   ]
 
   const topProducts = getTopProducts()
 
-  // Get unique customers
   const getUniqueCustomers = (): CustomerStats[] => {
     const uniqueCustomers: { [key: string]: CustomerStats } = {}
 
@@ -155,6 +172,9 @@ const AdminDashboard = () => {
   }
 
   const customers = getUniqueCustomers()
+
+  const orderLabel = (order: Order) =>
+    order.orderNumber || `#${order._id.slice(-6).toUpperCase()}`
 
   const renderTable = () => {
     if (activeTab === "products") {
@@ -185,7 +205,7 @@ const AdminDashboard = () => {
                 </TableRow>
               ) : (
                 topProducts.map((product, index) => (
-                  <TableRow key={index}>
+                  <TableRow key={`${product.name}-${index}`}>
                     <TableCell>{index + 1}</TableCell>
                     <TableCell className="font-medium">
                       {product.name}
@@ -231,8 +251,8 @@ const AdminDashboard = () => {
               ) : (
                 orders.slice(0, 10).map((order) => (
                   <TableRow key={order._id}>
-                    <TableCell className="font-mono text-xs">
-                      #{order._id.slice(-6)}
+                    <TableCell className="font-mono text-xs font-medium">
+                      {orderLabel(order)}
                     </TableCell>
                     <TableCell className="font-medium">
                       {order.customerName}
@@ -276,7 +296,7 @@ const AdminDashboard = () => {
                 </TableRow>
               ) : (
                 customers.slice(0, 10).map((customer, index) => (
-                  <TableRow key={index}>
+                  <TableRow key={`${customer.mobile}-${index}`}>
                     <TableCell>{index + 1}</TableCell>
                     <TableCell className="font-medium">
                       {customer.name}
@@ -297,15 +317,74 @@ const AdminDashboard = () => {
       )
     }
 
+    if (activeTab === "feedback") {
+      return (
+        <>
+          <h3 className="mb-4 font-semibold">Recent Feedback</h3>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Rating</TableHead>
+                <TableHead>Comment</TableHead>
+                <TableHead className="text-right">Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentFeedback.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-muted-foreground"
+                  >
+                    No feedback submitted yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                recentFeedback.map((fb) => (
+                  <TableRow key={fb._id}>
+                    <TableCell className="font-medium">
+                      {fb.customerName || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {fb.overallRating != null
+                        ? `${fb.overallRating}★`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="max-w-[280px] truncate text-muted-foreground">
+                      {fb.overallComment || "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">
+                      {fb.submittedAt
+                        ? new Date(fb.submittedAt).toLocaleDateString()
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </>
+      )
+    }
+
     return null
   }
+
+  const tableTitle =
+    activeTab === "products"
+      ? "Top 10 Products"
+      : activeTab === "orders"
+        ? "Recent Orders"
+        : activeTab === "customers"
+          ? "Customer List"
+          : "Recent Feedback"
 
   return (
     <div>
       <h1 className="mb-6 text-3xl font-bold">Dashboard</h1>
 
-      {/* Stats Cards */}
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card
             key={stat.title}
@@ -331,14 +410,9 @@ const AdminDashboard = () => {
         ))}
       </div>
 
-      {/* Data Table */}
       <Card className="border-0 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg">
-            {activeTab === "products" && "Top 10 Products"}
-            {activeTab === "orders" && "Recent Orders"}
-            {activeTab === "customers" && "Customer List"}
-          </CardTitle>
+          <CardTitle className="text-lg">{tableTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           {loading || loadingData ? (

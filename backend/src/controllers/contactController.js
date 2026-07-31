@@ -1,5 +1,6 @@
 const ContactMessage = require('../models/ContactMessage');
 const emailService = require('../services/emailService');
+const notificationService = require('../services/notificationService');
 
 exports.createMessage = async (req, res) => {
   try {
@@ -18,6 +19,7 @@ exports.createMessage = async (req, res) => {
     });
 
     emailService.notifyAdminContactMessage(doc).catch(() => {});
+    notificationService.createMessageNotification(doc).catch(() => {});
 
     res.status(201).json({
       success: true,

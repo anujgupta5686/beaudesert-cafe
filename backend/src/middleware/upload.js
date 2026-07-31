@@ -1,18 +1,17 @@
-const cloudinary = require("cloudinary").v2;
+/**
+ * Legacy helper — prefer storageService.uploadImage().
+ * Kept so older imports keep working; routes through the active provider.
+ */
+const storageService = require('../services/storageService');
 
 const uploadToCloudinary = async (file) => {
-    try {
-        const result = await cloudinary.uploader.upload(file.tempFilePath, {
-            folder: 'cafe_menu',
-            width: 500,
-            height: 500,
-            crop: 'limit'
-        });
-        return result.secure_url;
-    } catch (error) {
-        console.error('Cloudinary upload error:', error);
-        throw error;
-    }
+  try {
+    const result = await storageService.uploadImage(file);
+    return result.url;
+  } catch (error) {
+    console.error('Storage upload error:', error);
+    return null;
+  }
 };
 
 module.exports = uploadToCloudinary;

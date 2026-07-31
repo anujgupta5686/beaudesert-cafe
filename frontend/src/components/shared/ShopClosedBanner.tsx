@@ -1,17 +1,8 @@
-import { useEffect, useState } from "react"
-import axios from "@/api/axios"
 import { AlertTriangle } from "lucide-react"
-import type { CafeSettings } from "@/types"
+import { useCafeSettingsQuery } from "@/hooks/useMenuQueries"
 
 export function ShopClosedBanner() {
-  const [settings, setSettings] = useState<CafeSettings | null>(null)
-
-  useEffect(() => {
-    axios
-      .get("/cafe-settings")
-      .then((res) => setSettings(res.data.data))
-      .catch(() => {})
-  }, [])
+  const { data: settings } = useCafeSettingsQuery()
 
   if (!settings?.isTemporarilyClosed) return null
 

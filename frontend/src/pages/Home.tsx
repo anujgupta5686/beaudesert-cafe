@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useMenuQuery } from "@/hooks/useMenuQueries"
 import {
   Coffee,
   ChefHat,
@@ -16,8 +17,6 @@ import {
   Search,
   CheckCircle2,
 } from "lucide-react"
-import { useAppDispatch, useAppSelector } from "@/store/hooks"
-import { fetchMenu } from "@/store/slices/menuSlice"
 import { useCart } from "@/hooks/useCart"
 import { useCartQuantity } from "@/hooks/useCartQuantity"
 import MenuCard from "@/components/shared/MenuCard"
@@ -53,16 +52,11 @@ const features = [
 
 const Home = () => {
   const navigate = useNavigate()
-  const dispatch = useAppDispatch()
-  const { items, loading } = useAppSelector((state) => state.menu)
+  const { data: items = [], isLoading: loading } = useMenuQuery()
   const { addItem, updateQuantity } = useCart()
   const { getQuantity } = useCartQuantity()
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-
-  useEffect(() => {
-    dispatch(fetchMenu())
-  }, [dispatch])
 
   const featuredItems = items.slice(0, 8)
 
@@ -244,7 +238,7 @@ const Home = () => {
                 sweets, and value combos. Order online for pickup or delivery —
                 or pull up a chair and enjoy the atmosphere with us.
               </p>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
                 {[
                   {
                     icon: Heart,
@@ -266,13 +260,17 @@ const Home = () => {
                     key={item.label}
                     custom={i}
                     variants={fadeUp}
-                    className="space-y-1.5"
+                    className="min-w-0 space-y-1.5 rounded-xl border border-border/60 bg-muted/20 p-2.5 sm:border-0 sm:bg-transparent sm:p-0"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                      <item.icon className="h-4 w-4 text-primary" />
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 sm:h-9 sm:w-9">
+                      <item.icon className="h-3.5 w-3.5 text-primary sm:h-4 sm:w-4" />
                     </span>
-                    <p className="text-sm font-semibold">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">{item.detail}</p>
+                    <p className="text-xs font-semibold sm:text-sm">
+                      {item.label}
+                    </p>
+                    <p className="text-[10px] leading-snug text-muted-foreground sm:text-xs">
+                      {item.detail}
+                    </p>
                   </motion.div>
                 ))}
               </div>
@@ -394,12 +392,7 @@ const Home = () => {
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {featuredItems.map((item, i) => {
-                const size = item.hasVariants
-                  ? item.variants?.find((v) => v.isDefault)?.label ||
-                    item.variants?.[0]?.label
-                  : null
-                return (
+              {featuredItems.map((item, i) => (
                   <motion.div
                     key={item._id}
                     custom={i}
@@ -411,13 +404,12 @@ const Home = () => {
                     <MenuCard
                       item={item}
                       onAddToCart={addItem}
-                      quantity={getQuantity(item._id, size)}
+                      getQuantity={getQuantity}
                       onUpdateQuantity={updateQuantity}
                       onClick={() => openProductDialog(item)}
                     />
                   </motion.div>
-                )
-              })}
+              ))}
             </div>
           )}
 

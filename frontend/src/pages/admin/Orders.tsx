@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { AnimatePresence, motion } from "framer-motion"
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback"
 import axios from "@/api/axios"
@@ -43,6 +44,7 @@ type Meta = {
 }
 
 const Orders = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [meta, setMeta] = useState<Meta>({
     page: 1,
@@ -61,6 +63,15 @@ const Orders = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const [sortBy, sortOrder] = sortKey.split("-")
+
+  // Deep-link from notifications: /admin/orders?order=BC-...
+  useEffect(() => {
+    const orderParam = searchParams.get("order")
+    if (!orderParam) return
+    setSearchInput(orderParam)
+    setSearch(orderParam)
+    setPage(1)
+  }, [searchParams])
 
   const debouncedSearch = useDebouncedCallback((value: string) => {
     setSearch(value)
@@ -93,6 +104,22 @@ const Orders = () => {
     fetchOrders()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, status, page, sortBy, sortOrder])
+
+  // Open matching order from notification deep-link
+  useEffect(() => {
+    const orderParam = searchParams.get("order")
+    if (!orderParam || loading || !orders.length) return
+    const match = orders.find(
+      (o) => o.orderNumber === orderParam || o._id === orderParam
+    )
+    if (match) {
+      setSelectedOrder(match)
+      setDialogOpen(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete("order")
+      setSearchParams(next, { replace: true })
+    }
+  }, [orders, loading, searchParams, setSearchParams])
 
   const handleMarkSuccess = async (orderId: string) => {
     try {

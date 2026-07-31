@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useAppDispatch, useAppSelector } from "@/store/hooks"
-import { fetchMenu, deleteMenuItem, updateMenuItem } from "@/store/slices/menuSlice"
+import {
+  useDeleteProductMutation,
+  useMenuQuery,
+  useUpdateProductMutation,
+} from "@/hooks/useMenuQueries"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -25,22 +28,22 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { formatPrice } from "@/lib/formatPrice"
-import { Plus, Search, Edit, Trash2 } from "lucide-react"
+import { Loader2, Plus, Search, Edit, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import type { MenuItem } from "@/types"
+import { getProductImages } from "@/lib/productImages"
 
 const Products = () => {
   const navigate = useNavigate()
-  const dispatch = useAppDispatch()
-  const { items, loading } = useAppSelector((state) => state.menu)
+  const { data: items = [], isLoading, isError, refetch, isFetching } =
+    useMenuQuery({ includeUnavailable: true })
+  const updateProduct = useUpdateProductMutation()
+  const deleteProduct = useDeleteProductMutation()
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState<"normal" | "combo">("normal")
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-
-  useEffect(() => {
-    dispatch(fetchMenu({ includeUnavailable: true }))
-  }, [dispatch])
 
   const filteredItems = items.filter((item) => {
     const type = item.productType || "normal"
@@ -52,14 +55,17 @@ const Products = () => {
   })
 
   const handleDelete = async () => {
-    if (deleteId) {
-      await dispatch(deleteMenuItem(deleteId))
+    if (!deleteId) return
+    try {
+      await deleteProduct.mutateAsync(deleteId)
       toast.success("Product deleted successfully")
       setDeleteId(null)
+    } catch {
+      toast.error("Failed to delete product")
     }
   }
 
-  const toggleAvailability = async (item: (typeof items)[0]) => {
+  const toggleAvailability = async (item: MenuItem) => {
     const next = item.isAvailable === false
     try {
       setTogglingId(item._id)
@@ -77,7 +83,7 @@ const Products = () => {
         fd.append("hasVariants", "true")
         fd.append("variants", JSON.stringify(item.variants || []))
       }
-      await dispatch(updateMenuItem({ id: item._id, data: fd })).unwrap()
+      await updateProduct.mutateAsync({ id: item._id, data: fd })
       toast.success(next ? "Marked available" : "Marked sold out")
     } catch {
       toast.error("Failed to update availability")
@@ -86,7 +92,7 @@ const Products = () => {
     }
   }
 
-  const categoryName = (item: (typeof items)[0]) => {
+  const categoryName = (item: MenuItem) => {
     if (typeof item.category === "object" && item.category) {
       return item.category.name
     }
@@ -97,13 +103,26 @@ const Products = () => {
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold">Products</h1>
-        <Button
-          className="cursor-pointer"
-          onClick={() => navigate("/admin/products/add")}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Product
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="cursor-pointer"
+            disabled={isFetching}
+            onClick={() => refetch()}
+          >
+            {isFetching ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Refresh
+          </Button>
+          <Button
+            className="cursor-pointer"
+            onClick={() => navigate("/admin/products/add")}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4 flex gap-2">
@@ -137,11 +156,24 @@ const Products = () => {
         </div>
       </div>
 
+      {isError && (
+        <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+          Failed to load products.{" "}
+          <button
+            type="button"
+            className="cursor-pointer font-medium underline"
+            onClick={() => refetch()}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Image</TableHead>
+              <TableHead>Images</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Price</TableHead>
@@ -150,10 +182,10 @@ const Products = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center">
-                  Loading...
+                <TableCell colSpan={6} className="py-10 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
                 </TableCell>
               </TableRow>
             ) : filteredItems.length === 0 ? (
@@ -171,11 +203,16 @@ const Products = () => {
                     className={cn(!available && "opacity-60")}
                   >
                     <TableCell>
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="h-12 w-12 rounded-md object-contain bg-muted/40"
-                      />
+                      <div className="scrollbar-thin-theme flex max-w-[140px] items-center gap-1 overflow-x-auto pb-0.5">
+                        {getProductImages(item).map((src, i) => (
+                          <img
+                            key={`${item._id}-${i}`}
+                            src={src}
+                            alt={`${item.name} ${i + 1}`}
+                            className="h-8 w-8 shrink-0 rounded-md border border-border bg-muted/40 object-contain"
+                          />
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell className="font-medium">
                       {item.name}
@@ -247,7 +284,7 @@ const Products = () => {
               onClick={handleDelete}
               className="cursor-pointer bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {deleteProduct.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

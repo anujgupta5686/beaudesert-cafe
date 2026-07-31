@@ -1,11 +1,36 @@
 const Menu = require('../models/Menu');
 const storageService = require('../services/storageService');
 const { parseJsonField } = require('../utils/helpers');
+const mongoose = require('mongoose');
 
 const populateMenu = (query) =>
   query
     .populate('category', 'name slug')
-    .populate('comboItems.item', 'name price image hasVariants variants');
+    .populate(
+      'comboItems.item',
+      'name description price image images hasVariants variants isAvailable'
+    );
+
+/** Resolve combo line-item ids from payload; skip empty / invalid */
+const extractComboItemIds = (itemsPayload) => {
+  const ids = [];
+  for (const entry of itemsPayload) {
+    const raw = entry?.id ?? entry?.item;
+    if (raw == null || raw === '') continue;
+    const id = typeof raw === 'object' && raw._id ? String(raw._id) : String(raw);
+    if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
+      ids.push(id);
+    }
+  }
+  return ids;
+};
+
+/** Products eligible to be inside a combo (anything that is not itself a combo) */
+const findComboSourceProducts = (ids) =>
+  Menu.find({
+    _id: { $in: ids },
+    productType: { $ne: 'combo' },
+  });
 
 exports.getMenuItems = async (req, res) => {
   try {
@@ -66,11 +91,26 @@ exports.createMenuItem = async (req, res) => {
       isAvailable,
     } = req.body;
 
-    if (!req.files || !req.files.image) {
-      return res.status(400).json({ success: false, message: 'Image is required' });
+    const fileBag = storageService.collectImageFiles(req.files);
+    if (!fileBag.length) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'At least one image is required' });
+    }
+    if (fileBag.length > 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum 6 images allowed per product',
+      });
     }
 
-    const uploaded = await storageService.uploadImage(req.files.image);
+    const imageUrls = await storageService.uploadImages(fileBag);
+    if (!imageUrls.length) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Image upload failed' });
+    }
+
     const enableVariants = hasVariants === true || hasVariants === 'true';
     const parsedVariants = enableVariants ? parseJsonField(variants, []) : [];
     const available =
@@ -82,7 +122,8 @@ exports.createMenuItem = async (req, res) => {
       name,
       description,
       price: Number(price),
-      image: uploaded.url,
+      image: imageUrls[0],
+      images: imageUrls,
       category: categoryId || null,
       productType: 'normal',
       hasVariants: enableVariants,
@@ -90,10 +131,14 @@ exports.createMenuItem = async (req, res) => {
       isAvailable: available,
     });
 
-    const populated = await populateMenu(Menu.findById(item._id));
-    res.status(201).json({ success: true, data: populated });
+    const populated = await populateMenu(Menu.findById(item._id).lean());
+    return res.status(201).json({
+      success: true,
+      message: 'Product created successfully',
+      data: populated,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -131,9 +176,27 @@ exports.updateMenuItem = async (req, res) => {
         req.body.isAvailable === true || req.body.isAvailable === 'true';
     }
 
-    if (req.files && req.files.image) {
-      const uploaded = await storageService.uploadImage(req.files.image);
-      updateData.image = uploaded.url;
+    const fileBag = storageService.collectImageFiles(req.files);
+    const kept = parseJsonField(req.body.existingImages, []).slice(0, 6);
+
+    if (fileBag.length) {
+      if (kept.length + fileBag.length > 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maximum 6 images allowed per product',
+        });
+      }
+      const imageUrls = await storageService.uploadImages(fileBag);
+      const merged = [...kept, ...imageUrls].filter(Boolean).slice(0, 6);
+      if (merged.length) {
+        updateData.image = merged[0];
+        updateData.images = merged;
+      }
+    } else if (req.body.existingImages !== undefined) {
+      if (kept.length) {
+        updateData.image = kept[0];
+        updateData.images = kept;
+      }
     }
 
     const item = await Menu.findByIdAndUpdate(req.params.id, updateData, {
@@ -146,9 +209,13 @@ exports.updateMenuItem = async (req, res) => {
     }
 
     const populated = await populateMenu(Menu.findById(item._id));
-    res.json({ success: true, data: populated });
+    return res.status(200).json({
+      success: true,
+      message: 'Product updated successfully',
+      data: populated,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -179,20 +246,38 @@ exports.createCombo = async (req, res) => {
       });
     }
 
-    if (!req.files || !req.files.image) {
-      return res.status(400).json({ success: false, message: 'Image is required' });
+    if (!req.files) {
+      return res.status(400).json({ success: false, message: 'At least one image is required' });
     }
 
-    const ids = itemsPayload.map((i) => i.id || i.item);
-    const products = await Menu.find({
-      _id: { $in: ids },
-      productType: 'normal',
-    });
+    const fileBag = storageService.collectImageFiles(req.files);
+    if (!fileBag.length) {
+      return res.status(400).json({ success: false, message: 'At least one image is required' });
+    }
+    if (fileBag.length > 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum 6 images allowed per combo',
+      });
+    }
+
+    const ids = extractComboItemIds(itemsPayload);
+    if (ids.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'A combo needs at least 2 valid products',
+      });
+    }
+
+    const products = await findComboSourceProducts(ids);
 
     if (products.length !== ids.length) {
+      const found = new Set(products.map((p) => p._id.toString()));
+      const missing = ids.filter((id) => !found.has(id));
       return res.status(400).json({
         success: false,
         message: 'One or more combo items are invalid',
+        missingIds: missing,
       });
     }
 
@@ -214,25 +299,36 @@ exports.createCombo = async (req, res) => {
       };
     });
 
-    const uploaded = await storageService.uploadImage(req.files.image);
+    const imageUrls = await storageService.uploadImages(fileBag);
+    if (!imageUrls.length) {
+      return res.status(400).json({ success: false, message: 'Image upload failed' });
+    }
 
     const combo = await Menu.create({
-      name,
-      description,
+      name: String(name).trim(),
+      description: String(description).trim(),
       price: Number(comboPrice),
       originalPrice,
-      image: uploaded.url,
+      image: imageUrls[0],
+      images: imageUrls,
       category: categoryId || null,
       productType: 'combo',
       comboItems: mapped,
       hasVariants: false,
       variants: [],
+      isAvailable: true,
+      isActive: true,
     });
 
-    const populated = await populateMenu(Menu.findById(combo._id));
-    res.status(201).json({ success: true, data: populated });
+    // Fast response: return created doc; client invalidates & refetches list
+    const populated = await populateMenu(Menu.findById(combo._id).lean());
+    return res.status(201).json({
+      success: true,
+      message: 'Combo created successfully',
+      data: populated,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -252,15 +348,19 @@ exports.updateCombo = async (req, res) => {
 
     if (comboItems) {
       const itemsPayload = parseJsonField(comboItems, []);
-      const ids = itemsPayload.map((i) => i.id || i.item);
-      const products = await Menu.find({
-        _id: { $in: ids },
-        productType: 'normal',
-      });
+      const ids = extractComboItemIds(itemsPayload);
+      const products = await findComboSourceProducts(ids);
+
+      if (products.length !== ids.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more combo items are invalid',
+        });
+      }
 
       let originalPrice = 0;
       combo.comboItems = itemsPayload.map((entry) => {
-        const id = (entry.id || entry.item).toString();
+        const id = String(entry.id || entry.item);
         const product = products.find((p) => p._id.toString() === id);
         let unit = product?.price || 0;
         if (entry.variantLabel && product?.hasVariants) {
@@ -278,9 +378,27 @@ exports.updateCombo = async (req, res) => {
       combo.originalPrice = originalPrice;
     }
 
-    if (req.files && req.files.image) {
-      const uploaded = await storageService.uploadImage(req.files.image);
-      combo.image = uploaded.url;
+    const fileBag = storageService.collectImageFiles(req.files);
+    const kept = parseJsonField(req.body.existingImages, []).slice(0, 6);
+
+    if (fileBag.length) {
+      if (kept.length + fileBag.length > 6) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maximum 6 images allowed per combo',
+        });
+      }
+      const imageUrls = await storageService.uploadImages(fileBag);
+      const merged = [...kept, ...imageUrls].filter(Boolean).slice(0, 6);
+      if (merged.length) {
+        combo.image = merged[0];
+        combo.images = merged;
+      }
+    } else if (req.body.existingImages !== undefined) {
+      if (kept.length) {
+        combo.image = kept[0];
+        combo.images = kept;
+      }
     }
 
     await combo.save();

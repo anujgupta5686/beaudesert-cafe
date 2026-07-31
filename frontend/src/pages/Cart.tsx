@@ -8,6 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useCart } from "@/hooks/useCart"
 import { formatPrice } from "@/lib/formatPrice"
 import { Trash2, Plus, Minus, ArrowLeft, ShoppingBag } from "lucide-react"
@@ -20,6 +27,7 @@ const Cart = () => {
     totalPrice,
     removeItem,
     updateQuantity,
+    changeItemSize,
     clearCart,
   } = useCart()
 
@@ -74,16 +82,39 @@ const Cart = () => {
                     <img
                       src={item.image}
                       alt={item.name}
-                      className="h-20 w-20 rounded-xl object-cover ring-1 ring-foreground/5"
+                      className="h-20 w-20 rounded-xl bg-muted/40 object-contain ring-1 ring-foreground/5"
                     />
                     <div className="min-w-0 flex-1 text-center sm:text-left">
                       <h3 className="font-semibold">{item.name}</h3>
-                      {item.size && (
+                      {item.hasVariants && item.variants && item.variants.length > 0 ? (
+                        <div className="mt-2 flex flex-col items-center gap-1.5 sm:items-start">
+                          <span className="text-xs text-muted-foreground">
+                            Size
+                          </span>
+                          <Select
+                            value={item.size || undefined}
+                            onValueChange={(v) => {
+                              if (v) changeItemSize(item.cartKey, String(v))
+                            }}
+                          >
+                            <SelectTrigger className="h-9 w-full max-w-[180px] cursor-pointer">
+                              <SelectValue placeholder="Select size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {item.variants.map((v) => (
+                                <SelectItem key={v.label} value={v.label}>
+                                  {v.label} — {formatPrice(v.price)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : item.size ? (
                         <p className="text-xs text-muted-foreground">
                           Size: {item.size}
                         </p>
-                      )}
-                      <p className="mt-0.5 font-bold text-primary">
+                      ) : null}
+                      <p className="mt-1 font-bold text-primary">
                         {formatPrice(item.price)}
                       </p>
                     </div>
@@ -92,7 +123,7 @@ const Cart = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 cursor-pointer"
                         onClick={() =>
                           updateQuantity(item.cartKey, item.quantity - 1)
                         }
@@ -105,7 +136,7 @@ const Cart = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8"
+                        className="h-8 w-8 cursor-pointer"
                         onClick={() =>
                           updateQuantity(item.cartKey, item.quantity + 1)
                         }
@@ -121,7 +152,7 @@ const Cart = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="mt-1 text-destructive hover:text-destructive"
+                        className="mt-1 cursor-pointer text-destructive hover:text-destructive"
                         onClick={() => removeItem(item.cartKey)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -149,11 +180,15 @@ const Cart = () => {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3 sm:flex-row">
-            <Button variant="outline" className="h-11 flex-1" onClick={clearCart}>
+            <Button
+              variant="outline"
+              className="h-11 flex-1 cursor-pointer"
+              onClick={clearCart}
+            >
               Clear Cart
             </Button>
             <Button
-              className="h-11 flex-1"
+              className="h-11 flex-1 cursor-pointer"
               onClick={() => navigate("/checkout")}
             >
               Proceed to Checkout
