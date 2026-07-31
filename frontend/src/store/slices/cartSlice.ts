@@ -69,6 +69,8 @@ const cartSlice = createSlice({
           size,
           productType: item.productType || "normal",
           originalPrice: item.originalPrice,
+          hasVariants: !!item.hasVariants,
+          variants: item.variants || [],
         })
       }
       persist(state.items)
@@ -98,6 +100,32 @@ const cartSlice = createSlice({
       }
       persist(state.items)
     },
+    /** Change size on an existing cart line (merges if target size already exists) */
+    changeItemSize: (
+      state,
+      action: PayloadAction<{ cartKey: string; size: string }>
+    ) => {
+      const { cartKey, size } = action.payload
+      const line = state.items.find((l) => l.cartKey === cartKey)
+      if (!line || !line.hasVariants || !line.variants?.length) return
+      if (line.size === size) return
+
+      const variant = line.variants.find((v) => v.label === size)
+      if (!variant) return
+
+      const newKey = buildCartKey(line._id, size)
+      const existing = state.items.find((l) => l.cartKey === newKey)
+
+      if (existing) {
+        existing.quantity += line.quantity
+        state.items = state.items.filter((l) => l.cartKey !== cartKey)
+      } else {
+        line.cartKey = newKey
+        line.size = size
+        line.price = variant.price
+      }
+      persist(state.items)
+    },
     clearCart: (state) => {
       state.items = []
       localStorage.removeItem("cart")
@@ -105,6 +133,6 @@ const cartSlice = createSlice({
   },
 })
 
-export const { addItem, removeItem, updateQuantity, clearCart } =
+export const { addItem, removeItem, updateQuantity, changeItemSize, clearCart } =
   cartSlice.actions
 export default cartSlice.reducer

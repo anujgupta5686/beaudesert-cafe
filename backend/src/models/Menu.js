@@ -39,9 +39,15 @@ const menuSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    /** Primary / cover image (kept for backward compatibility) */
     image: {
       type: String,
       required: true,
+    },
+    /** Additional gallery images (includes primary as first when set) */
+    images: {
+      type: [String],
+      default: [],
     },
     category: {
       type: mongoose.Schema.Types.ObjectId,

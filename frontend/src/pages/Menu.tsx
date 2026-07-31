@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useAppDispatch, useAppSelector } from "@/store/hooks"
-import { fetchMenu } from "@/store/slices/menuSlice"
+import { useMenuQuery, useCategoriesQuery } from "@/hooks/useMenuQueries"
 import { useCart } from "@/hooks/useCart"
 import { useCartQuantity } from "@/hooks/useCartQuantity"
 import MenuCard from "@/components/shared/MenuCard"
@@ -9,27 +8,18 @@ import { ProductDetailDialog } from "@/components/shared/ProductDetailDialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search } from "lucide-react"
-import axios from "@/api/axios"
-import type { Category, MenuItem } from "@/types"
+import type { MenuItem } from "@/types"
 
 const Menu = () => {
-  const dispatch = useAppDispatch()
-  const { items, loading } = useAppSelector((state) => state.menu)
+  const { data: items = [], isLoading, isError, refetch, isFetching } =
+    useMenuQuery()
+  const { data: categories = [] } = useCategoriesQuery(false)
   const { addItem, updateQuantity } = useCart()
   const { getQuantity } = useCartQuantity()
   const [searchTerm, setSearchTerm] = useState("")
   const [activeCategory, setActiveCategory] = useState("all")
-  const [categories, setCategories] = useState<Category[]>([])
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-
-  useEffect(() => {
-    dispatch(fetchMenu())
-    axios
-      .get("/categories")
-      .then((res) => setCategories(res.data.data || []))
-      .catch(() => setCategories([]))
-  }, [dispatch])
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -90,7 +80,7 @@ const Menu = () => {
               key={filter.key}
               size="sm"
               variant={activeCategory === filter.key ? "default" : "outline"}
-              className="h-9 rounded-full px-4"
+              className="h-9 cursor-pointer rounded-full px-4"
               onClick={() => setActiveCategory(filter.key)}
             >
               {filter.label}
@@ -98,7 +88,20 @@ const Menu = () => {
           ))}
         </div>
 
-        {loading ? (
+        {isError ? (
+          <div className="rounded-2xl border border-dashed py-16 text-center">
+            <p className="mb-3 text-sm text-muted-foreground">
+              Could not load menu. Check your connection.
+            </p>
+            <Button
+              className="cursor-pointer"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              Try again
+            </Button>
+          </div>
+        ) : isLoading ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           </div>
@@ -111,33 +114,27 @@ const Menu = () => {
         ) : (
           <AnimatePresence mode="popLayout">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {filteredItems.map((item, i) => {
-                const size = item.hasVariants
-                  ? item.variants?.find((v) => v.isDefault)?.label ||
-                    item.variants?.[0]?.label
-                  : null
-                return (
-                  <motion.div
-                    key={item._id}
-                    layout
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ delay: Math.min(i * 0.03, 0.3) }}
-                  >
-                    <MenuCard
-                      item={item}
-                      onAddToCart={addItem}
-                      quantity={getQuantity(item._id, size)}
-                      onUpdateQuantity={updateQuantity}
-                      onClick={() => {
-                        setSelectedItem(item)
-                        setDialogOpen(true)
-                      }}
-                    />
-                  </motion.div>
-                )
-              })}
+              {filteredItems.map((item, i) => (
+                <motion.div
+                  key={item._id}
+                  layout
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                >
+                  <MenuCard
+                    item={item}
+                    onAddToCart={addItem}
+                    getQuantity={getQuantity}
+                    onUpdateQuantity={updateQuantity}
+                    onClick={() => {
+                      setSelectedItem(item)
+                      setDialogOpen(true)
+                    }}
+                  />
+                </motion.div>
+              ))}
             </div>
           </AnimatePresence>
         )}

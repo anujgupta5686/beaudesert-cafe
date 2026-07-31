@@ -3,6 +3,7 @@ import {
   addItem,
   removeItem,
   updateQuantity,
+  changeItemSize,
   clearCart,
 } from "@/store/slices/cartSlice"
 import type { MenuItem } from "@/types"
@@ -27,6 +28,8 @@ export const useCart = () => {
     removeItem: (cartKey: string) => dispatch(removeItem(cartKey)),
     updateQuantity: (cartKey: string, quantity: number) =>
       dispatch(updateQuantity({ id: cartKey, quantity })),
+    changeItemSize: (cartKey: string, size: string) =>
+      dispatch(changeItemSize({ cartKey, size })),
     clearCart: () => dispatch(clearCart()),
     getQuantity: (id: string, size?: string | null) => {
       const key = buildCartKey(id, size)

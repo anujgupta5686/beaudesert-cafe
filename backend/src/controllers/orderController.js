@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const Menu = require('../models/Menu');
 const emailService = require('../services/emailService');
 const feedbackService = require('../services/feedbackService');
+const notificationService = require('../services/notificationService');
 const { generateOrderNumber } = require('../utils/orderNumber');
 const logger = require('../utils/logger');
 
@@ -113,6 +114,7 @@ exports.createOrder = async (req, res) => {
 
     emailService.sendOrderConfirmationToUser(order);
     emailService.sendOrderNotificationToAdmin(order);
+    notificationService.createOrderNotification(order).catch(() => {});
 
     res.status(201).json({
       success: true,

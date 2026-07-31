@@ -17,6 +17,7 @@ import { useAppDispatch } from "@/store/hooks"
 import { logoutAdmin } from "@/store/slices/authSlice"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/shared/ThemeToggle"
+import { AdminNotifications } from "@/components/shared/AdminNotifications"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -126,7 +127,10 @@ const AdminLayout = () => {
 
         <div className="border-t p-3">
           <div className="flex items-center justify-between gap-2">
-            <ThemeToggle />
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <AdminNotifications />
+            </div>
             <Button
               variant="outline"
               size="sm"

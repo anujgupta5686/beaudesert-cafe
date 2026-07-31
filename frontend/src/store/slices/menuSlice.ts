@@ -40,9 +40,7 @@ export const createMenuItem = createAsyncThunk(
   "menu/create",
   async (data: FormData, { rejectWithValue }) => {
     try {
-      const response = await axios.post("/menu", data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
+      const response = await axios.post("/menu", data)
       return response.data.data
     } catch (error: any) {
       return rejectWithValue(
@@ -56,9 +54,7 @@ export const updateMenuItem = createAsyncThunk(
   "menu/update",
   async ({ id, data }: { id: string; data: FormData }, { rejectWithValue }) => {
     try {
-      const response = await axios.put(`/menu/${id}`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
+      const response = await axios.put(`/menu/${id}`, data)
       return response.data.data
     } catch (error: any) {
       return rejectWithValue(

@@ -11,6 +11,11 @@ const {
     changePassword
 } = require('../controllers/adminController');
 const { verifyToken } = require('../middleware/auth');
+const {
+  getNotifications,
+  markAsRead,
+  markAllAsRead,
+} = require('../controllers/notificationController');
 
 console.log('🔧 Loading Admin Routes...');
 
@@ -45,6 +50,11 @@ router.get('/profile', verifyToken, getCurrentAdmin);
 
 // Change Password (Logged in)
 router.put('/change-password', verifyToken, changePassword);
+
+// Notifications
+router.get('/notifications', verifyToken, getNotifications);
+router.patch('/notifications/read-all', verifyToken, markAllAsRead);
+router.patch('/notifications/:id/read', verifyToken, markAsRead);
 
 console.log('✅ Admin Routes Loaded Successfully');
 

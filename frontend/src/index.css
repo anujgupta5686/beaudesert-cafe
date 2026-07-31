@@ -139,3 +139,23 @@
   width: 0;
   height: 0;
 }
+
+/* Thin theme-aware scrollbar (light + dark) */
+.scrollbar-thin-theme {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scrollbar-thin-theme::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.scrollbar-thin-theme::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin-theme::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+.scrollbar-thin-theme::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
