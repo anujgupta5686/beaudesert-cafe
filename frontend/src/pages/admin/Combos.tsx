@@ -46,6 +46,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { formatPrice } from "@/lib/formatPrice"
+import { resolveMediaUrl } from "@/lib/mediaUrl"
 import { Image as ImageIcon, Loader2, Trash2, Layers, Upload, X, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -413,7 +414,7 @@ const Combos = () => {
                             </TableCell>
                             <TableCell>
                               <img
-                                src={item.image}
+                                src={resolveMediaUrl(item.image)}
                                 alt={item.name}
                                 className="h-12 w-12 rounded-lg bg-muted/40 object-contain"
                               />
@@ -524,7 +525,7 @@ const Combos = () => {
                         >
                           <TableCell>
                             <img
-                              src={item.image}
+                              src={resolveMediaUrl(item.image)}
                               alt={item.name}
                               className="h-14 w-14 rounded-lg bg-muted/40 object-contain"
                             />

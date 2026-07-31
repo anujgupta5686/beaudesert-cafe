@@ -1,4 +1,5 @@
 import type { MenuItem } from "@/types"
+import { resolveMediaUrl } from "@/lib/mediaUrl"
 
 /** Normalize product gallery — always returns at least cover `image` (max 6) */
 export function getProductImages(
@@ -16,5 +17,8 @@ export function getProductImages(
   } else {
     result = item.image ? [item.image] : []
   }
-  return result.slice(0, 6)
+  return result
+    .slice(0, 6)
+    .map((url) => resolveMediaUrl(url))
+    .filter(Boolean)
 }

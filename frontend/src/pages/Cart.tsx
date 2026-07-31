@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select"
 import { useCart } from "@/hooks/useCart"
 import { formatPrice } from "@/lib/formatPrice"
+import { resolveMediaUrl } from "@/lib/mediaUrl"
 import { Trash2, Plus, Minus, ArrowLeft, ShoppingBag } from "lucide-react"
 
 const Cart = () => {
@@ -80,7 +81,7 @@ const Cart = () => {
                 <CardContent className="p-4 md:p-5">
                   <div className="flex flex-col items-center gap-4 sm:flex-row">
                     <img
-                      src={item.image}
+                      src={resolveMediaUrl(item.image)}
                       alt={item.name}
                       className="h-20 w-20 rounded-xl bg-muted/40 object-contain ring-1 ring-foreground/5"
                     />

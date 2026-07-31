@@ -8,11 +8,12 @@ const logger = require('../utils/logger');
  * Unified media storage service.
  *
  * Switch with STORAGE_PROVIDER only:
- *   local      → backend/uploads (local / EC2 disk testing)
- *   cloudinary → Cloudinary (optional shared/dev cloud)
- *   s3         → AWS S3 (recommended for EC2 / production)
+ *   local      → backend/uploads (stores absolute BACKEND_URL link in DB)
+ *   cloudinary → Cloudinary secure_url stored in DB
+ *   s3         → S3/CloudFront public URL stored in DB
  *
- * Supports images (and other file types) via express-fileupload.
+ * Menu.create / update always persist `uploaded.url` on `image` + `images[]`.
+ * Frontend never hardcodes product data — it always loads from the API.
  */
 const toFileArray = (files) => {
   if (!files) return [];
@@ -132,9 +133,16 @@ const storageService = {
     const dest = path.join(destDir, name);
     fs.writeFileSync(dest, readFileBuffer(file));
 
-    const url = `${env.backendUrl}/uploads/${folder}/${name}`;
-    logger.info('Uploaded to local disk', { url });
-    return { url, publicId: `${folder}/${name}`, provider: 'local' };
+    // File on disk under backend/uploads; DB stores the public link for this environment
+    const relativePath = `/uploads/${folder}/${name}`;
+    const absoluteUrl = `${env.backendUrl}${relativePath}`;
+    logger.info('Uploaded to local disk', { relativePath, absoluteUrl });
+    return {
+      url: absoluteUrl,
+      relativePath,
+      publicId: `${folder}/${name}`,
+      provider: 'local',
+    };
   },
 
   async uploadToCloudinary(file, folder) {

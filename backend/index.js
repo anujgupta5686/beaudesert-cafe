@@ -116,6 +116,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
   logger.info(`APP_ENV=${env.appEnv} NODE_ENV=${env.nodeEnv}`);
+  logger.info(`isLocal=${env.isLocal} isHosted=${env.isHosted}`);
   logger.info(`STORAGE_PROVIDER=${env.storageProvider}`);
   logger.info(`BACKEND_URL=${env.backendUrl}`);
   logger.info(`FRONTEND_URL=${env.frontendUrl}`);

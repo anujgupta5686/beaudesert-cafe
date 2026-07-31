@@ -39,6 +39,8 @@ function assertStorageConfig() {
 
   logger.info(`Storage provider: ${provider}`, {
     appEnv: env.appEnv,
+    isLocal: env.isLocal,
+    isHosted: env.isHosted,
     backendUrl: env.backendUrl,
   });
 }
