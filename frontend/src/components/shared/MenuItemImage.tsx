@@ -1,5 +1,6 @@
 import { Coffee } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { resolveMediaUrl } from "@/lib/mediaUrl"
 
 interface MenuItemImageProps {
   src?: string
@@ -14,13 +15,18 @@ export function MenuItemImage({
   className,
   iconClassName,
 }: MenuItemImageProps) {
-  if (src) {
+  const resolved = resolveMediaUrl(src)
+  if (resolved) {
     return (
       <img
-        src={src}
+        src={resolved}
         alt={alt}
         loading="lazy"
-        className={cn("h-full w-full object-cover", className)}
+        decoding="async"
+        className={cn("h-full w-full object-contain bg-muted/40", className)}
+        onError={(e) => {
+          e.currentTarget.style.display = "none"
+        }}
       />
     )
   }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react"
+import { Coffee } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getProductImages } from "@/lib/productImages"
 import type { MenuItem } from "@/types"
@@ -20,12 +21,14 @@ export function ImageCarousel({
 }: ImageCarouselProps) {
   const images = useMemo(() => getProductImages(item), [item])
   const [index, setIndex] = useState(0)
+  const [failed, setFailed] = useState<Record<number, boolean>>({})
   const touchStartX = useRef<number | null>(null)
   const multi = images.length > 1
   const galleryKey = images.join("|")
 
   useEffect(() => {
     setIndex(0)
+    setFailed({})
   }, [galleryKey])
 
   const go = (next: number, e?: SyntheticEvent) => {
@@ -49,15 +52,21 @@ export function ImageCarousel({
     go(delta < 0 ? index + 1 : index - 1)
   }
 
-  if (!images.length) {
-    return (
-      <div
-        className={cn(
-          "flex h-full w-full items-center justify-center bg-muted/40",
-          className
-        )}
-      />
-    )
+  if (!images.length || failed[index]) {
+    const allFailed =
+      images.length > 0 && images.every((_, i) => failed[i])
+    if (!images.length || (failed[index] && (!multi || allFailed))) {
+      return (
+        <div
+          className={cn(
+            "flex h-full w-full items-center justify-center bg-muted/40",
+            className
+          )}
+        >
+          <Coffee className="h-10 w-10 text-muted-foreground/30" />
+        </div>
+      )
+    }
   }
 
   return (
@@ -84,16 +93,26 @@ export function ImageCarousel({
         go(delta < 0 ? index + 1 : index - 1)
       }}
     >
-      {/* Fixed frame + object-contain = full image always visible, no crop */}
-      <img
-        src={images[index]}
-        alt={`${item.name} ${index + 1}`}
-        className={cn(
-          "absolute inset-0 h-full w-full object-contain p-2 select-none",
-          imgClassName
-        )}
-        draggable={false}
-      />
+      {!failed[index] ? (
+        <img
+          src={images[index]}
+          alt=""
+          className={cn(
+            "absolute inset-0 h-full w-full object-contain p-2 select-none",
+            imgClassName
+          )}
+          draggable={false}
+          loading="lazy"
+          decoding="async"
+          onError={() =>
+            setFailed((prev) => ({ ...prev, [index]: true }))
+          }
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Coffee className="h-10 w-10 text-muted-foreground/30" />
+        </div>
+      )}
 
       {multi && (
         <div

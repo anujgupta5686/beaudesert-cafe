@@ -132,7 +132,7 @@ const storageService = {
     const dest = path.join(destDir, name);
     fs.writeFileSync(dest, readFileBuffer(file));
 
-    const url = `${env.backendUrl}/uploads/${folder}/${name}`;
+    const url = `/uploads/${folder}/${name}`;
     logger.info('Uploaded to local disk', { url });
     return { url, publicId: `${folder}/${name}`, provider: 'local' };
   },

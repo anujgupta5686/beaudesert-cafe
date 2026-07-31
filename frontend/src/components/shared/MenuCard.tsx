@@ -84,7 +84,7 @@ const MenuCard = ({
         )}
         {hasDiscount && !unavailable && (
           <Badge className="pointer-events-none absolute top-2 right-2 z-20 bg-emerald-600 text-white">
-            Save
+            Deal
           </Badge>
         )}
       </div>

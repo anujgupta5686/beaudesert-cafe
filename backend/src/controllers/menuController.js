@@ -2,6 +2,7 @@ const Menu = require('../models/Menu');
 const storageService = require('../services/storageService');
 const { parseJsonField } = require('../utils/helpers');
 const mongoose = require('mongoose');
+const { normalizeMenuMedia, normalizeMenuList } = require('../utils/mediaUrl');
 
 const populateMenu = (query) =>
   query
@@ -30,7 +31,7 @@ const findComboSourceProducts = (ids) =>
   Menu.find({
     _id: { $in: ids },
     productType: { $ne: 'combo' },
-  });
+  }).select('_id name price hasVariants variants');
 
 exports.getMenuItems = async (req, res) => {
   try {
@@ -42,26 +43,29 @@ exports.getMenuItems = async (req, res) => {
     }
     if (category) {
       const Category = require('../models/Category');
-      const mongoose = require('mongoose');
       if (mongoose.Types.ObjectId.isValid(category) && String(category).length === 24) {
         filter.category = category;
       } else {
-        const cat = await Category.findOne({ slug: category });
+        const cat = await Category.findOne({ slug: category }).select('_id').lean();
         if (cat) filter.category = cat._id;
-        else filter.category = null; // force empty if unknown slug
+        else filter.category = null;
       }
     }
     if (active !== 'false') {
       filter.isActive = { $ne: false };
     }
-    // Unavailable items stay visible (faded / out-of-stock on frontend).
-    // includeUnavailable is kept for admin parity but no longer filters public list.
 
     const items = await populateMenu(
-      Menu.find(filter).sort({ createdAt: -1 })
+      Menu.find(filter)
+        .select(
+          'name description price image images category productType hasVariants variants comboItems originalPrice isActive isAvailable createdAt'
+        )
+        .sort({ createdAt: -1 })
+        .lean()
     );
 
-    res.json({ success: true, data: items });
+    res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=30');
+    res.json({ success: true, data: normalizeMenuList(items) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -69,11 +73,11 @@ exports.getMenuItems = async (req, res) => {
 
 exports.getMenuItem = async (req, res) => {
   try {
-    const item = await populateMenu(Menu.findById(req.params.id));
+    const item = await populateMenu(Menu.findById(req.params.id).lean());
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    res.json({ success: true, data: item });
+    res.json({ success: true, data: normalizeMenuMedia(item) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -135,7 +139,7 @@ exports.createMenuItem = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      data: populated,
+      data: normalizeMenuMedia(populated),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -208,11 +212,11 @@ exports.updateMenuItem = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
 
-    const populated = await populateMenu(Menu.findById(item._id));
+    const populated = await populateMenu(Menu.findById(item._id).lean());
     return res.status(200).json({
       success: true,
       message: 'Product updated successfully',
-      data: populated,
+      data: normalizeMenuMedia(populated),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -325,7 +329,7 @@ exports.createCombo = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Combo created successfully',
-      data: populated,
+      data: normalizeMenuMedia(populated),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -402,8 +406,8 @@ exports.updateCombo = async (req, res) => {
     }
 
     await combo.save();
-    const populated = await populateMenu(Menu.findById(combo._id));
-    res.json({ success: true, data: populated });
+    const populated = await populateMenu(Menu.findById(combo._id).lean());
+    res.json({ success: true, data: normalizeMenuMedia(populated) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
