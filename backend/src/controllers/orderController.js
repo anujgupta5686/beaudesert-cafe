@@ -24,12 +24,31 @@ exports.createOrder = async (req, res) => {
       address,
       specialInstructions,
       items,
+      location,
     } = req.body;
 
     if (!customerName || !email || !mobile || !address || !items?.length) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required',
+      });
+    }
+
+    const lat =
+      location?.lat != null && Number.isFinite(Number(location.lat))
+        ? Number(location.lat)
+        : null;
+    const lng =
+      location?.lng != null && Number.isFinite(Number(location.lng))
+        ? Number(location.lng)
+        : null;
+    if (
+      (lat != null && (lat < -90 || lat > 90)) ||
+      (lng != null && (lng < -180 || lng > 180))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid location coordinates',
       });
     }
 
@@ -90,6 +109,7 @@ exports.createOrder = async (req, res) => {
           email,
           mobile,
           address,
+          location: { lat, lng },
           specialInstructions: specialInstructions || '',
           items: validatedItems,
           totalAmount,
@@ -250,16 +270,30 @@ exports.updateOrderStatus = async (req, res) => {
     order.status = status;
     await order.save();
 
+    let emailSent = false;
+    let emailError = null;
     if (status === 'success') {
-      feedbackService.createAndEmail(order).catch((err) =>
-        logger.error('Feedback email failed', { error: err.message })
-      );
+      try {
+        await feedbackService.createAndEmail(order);
+        emailSent = true;
+      } catch (err) {
+        emailError = err.message;
+        logger.error('Order completion email failed', {
+          orderId: order._id,
+          error: err.message,
+        });
+      }
     }
 
     res.json({
       success: true,
-      message: 'Order status updated successfully',
+      message: emailSent
+        ? 'Order completed — confirmation email sent to customer'
+        : emailError
+          ? `Order completed, but email failed: ${emailError}`
+          : 'Order status updated successfully',
       data: order,
+      emailSent,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

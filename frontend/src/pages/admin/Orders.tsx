@@ -25,6 +25,11 @@ import {
 import { OrderDetailsDialog } from "@/components/shared/OrderDetailsDialog"
 import { formatPrice } from "@/lib/formatPrice"
 import {
+  googleMapsUrl,
+  hasValidCoords,
+  staticMapPreviewUrl,
+} from "@/lib/maps"
+import {
   Search,
   ShoppingBag,
   CheckCircle,
@@ -32,6 +37,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  MapPin,
 } from "lucide-react"
 import type { Order } from "@/types"
 import { toast } from "sonner"
@@ -64,7 +70,6 @@ const Orders = () => {
 
   const [sortBy, sortOrder] = sortKey.split("-")
 
-  // Deep-link from notifications: /admin/orders?order=BC-...
   useEffect(() => {
     const orderParam = searchParams.get("order")
     if (!orderParam) return
@@ -105,7 +110,6 @@ const Orders = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, status, page, sortBy, sortOrder])
 
-  // Open matching order from notification deep-link
   useEffect(() => {
     const orderParam = searchParams.get("order")
     if (!orderParam || loading || !orders.length) return
@@ -124,8 +128,19 @@ const Orders = () => {
   const handleMarkSuccess = async (orderId: string) => {
     try {
       setUpdatingId(orderId)
-      await axios.put(`/orders/${orderId}/status`, { status: "success" })
-      toast.success("Order marked as successful!")
+      const res = await axios.put(`/orders/${orderId}/status`, {
+        status: "success",
+      })
+      if (res.data?.emailSent) {
+        toast.success(
+          res.data.message ||
+            "Order completed — confirmation email sent to customer"
+        )
+      } else if (res.data?.message) {
+        toast.success(res.data.message)
+      } else {
+        toast.success("Order marked as completed")
+      }
       fetchOrders()
     } catch (error: unknown) {
       const message =
@@ -225,7 +240,7 @@ const Orders = () => {
       </div>
 
       <Card className="overflow-hidden border shadow-sm">
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="scrollbar-thin-theme p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -234,6 +249,7 @@ const Orders = () => {
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-center">Location</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-center">Action</TableHead>
               </TableRow>
@@ -241,13 +257,13 @@ const Orders = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-12 text-center">
+                  <TableCell colSpan={8} className="py-12 text-center">
                     <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-12 text-center">
+                  <TableCell colSpan={8} className="py-12 text-center">
                     <ShoppingBag className="mx-auto mb-2 h-10 w-10 opacity-30" />
                     <p className="font-medium">
                       {search ? "No orders match your search" : "No orders yet"}
@@ -256,54 +272,97 @@ const Orders = () => {
                 </TableRow>
               ) : (
                 <AnimatePresence mode="popLayout">
-                  {orders.map((order, i) => (
-                    <motion.tr
-                      key={order._id}
-                      layout
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      transition={{
-                        duration: 0.28,
-                        delay: Math.min(i * 0.03, 0.2),
-                      }}
-                      className="border-b hover:bg-muted/30"
-                    >
-                      <TableCell className="font-mono text-xs font-semibold">
-                        {orderLabel(order)}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {order.customerName}
-                      </TableCell>
-                      <TableCell className="hidden text-sm md:table-cell">
-                        {order.email || "—"}
-                      </TableCell>
-                      <TableCell>{order.items.length} items</TableCell>
-                      <TableCell className="text-right font-bold text-primary">
-                        {formatPrice(order.totalAmount)}
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(order.status || "pending")}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="cursor-pointer"
-                            onClick={() => {
-                              setSelectedOrder(order)
-                              setDialogOpen(true)
-                            }}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {order.status !== "success" && (
+                  {orders.map((order, i) => {
+                    const completed = order.status === "success"
+                    const loc = hasValidCoords(order.location)
+                      ? order.location
+                      : null
+                    return (
+                      <motion.tr
+                        key={order._id}
+                        layout
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{
+                          duration: 0.28,
+                          delay: Math.min(i * 0.03, 0.2),
+                        }}
+                        className="border-b hover:bg-muted/30"
+                      >
+                        <TableCell className="font-mono text-xs font-semibold">
+                          {orderLabel(order)}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {order.customerName}
+                        </TableCell>
+                        <TableCell className="hidden text-sm md:table-cell">
+                          {order.email || "—"}
+                        </TableCell>
+                        <TableCell>{order.items.length} items</TableCell>
+                        <TableCell className="text-right font-bold text-primary">
+                          {formatPrice(order.totalAmount)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {loc ? (
+                            <a
+                              href={googleMapsUrl(loc.lat, loc.lng)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open in Google Maps"
+                              className="group inline-flex overflow-hidden rounded-md border border-primary/25 shadow-sm transition hover:border-primary/60 hover:ring-2 hover:ring-primary/20"
+                            >
+                              <img
+                                src={staticMapPreviewUrl(
+                                  loc.lat,
+                                  loc.lng,
+                                  "72x72"
+                                )}
+                                alt="Order location map"
+                                width={48}
+                                height={48}
+                                className="h-12 w-12 object-cover"
+                                loading="lazy"
+                              />
+                            </a>
+                          ) : (
+                            <span
+                              className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-dashed bg-muted/40 text-muted-foreground"
+                              title={order.address || "No GPS pin"}
+                            >
+                              <MapPin className="h-4 w-4 opacity-50" />
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(order.status || "pending")}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-2">
                             <Button
                               size="sm"
-                              className="cursor-pointer bg-emerald-600 hover:bg-emerald-700"
+                              variant="outline"
+                              className="cursor-pointer"
+                              title="View order"
+                              onClick={() => {
+                                setSelectedOrder(order)
+                                setDialogOpen(true)
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="cursor-pointer bg-emerald-600 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
+                              title={
+                                completed
+                                  ? "Already completed"
+                                  : "Mark as completed"
+                              }
                               onClick={() => handleMarkSuccess(order._id)}
-                              disabled={updatingId === order._id}
+                              disabled={
+                                completed || updatingId === order._id
+                              }
                             >
                               {updatingId === order._id ? (
                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -311,11 +370,11 @@ const Orders = () => {
                                 <CheckCircle className="h-4 w-4" />
                               )}
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </motion.tr>
-                  ))}
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    )
+                  })}
                 </AnimatePresence>
               )}
             </TableBody>

@@ -62,6 +62,15 @@ app.use(
       return callback(null, false);
     },
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -84,7 +93,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/menu', require('./src/routes/menuRoutes'));
 app.use('/api/orders', require('./src/routes/orderRoutes'));
-app.use('/api/admin', authLimiter, require('./src/routes/adminRoutes'));
+// authLimiter is applied only to login/OTP routes inside adminRoutes (not polling)
+app.use('/api/admin', require('./src/routes/adminRoutes'));
 app.use('/api/categories', require('./src/routes/categoryRoutes'));
 app.use('/api/feedback', require('./src/routes/feedbackRoutes'));
 app.use('/api/cafe-settings', require('./src/routes/cafeSettingsRoutes'));

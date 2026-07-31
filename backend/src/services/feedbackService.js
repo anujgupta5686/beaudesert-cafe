@@ -4,18 +4,33 @@ const emailService = require('./emailService');
 const logger = require('../utils/logger');
 
 const feedbackService = {
+  /**
+   * Create feedback token (if needed) and always send the
+   * "order completed + feedback" email to the customer.
+   */
   async createAndEmail(order) {
-    const existing = await Feedback.findOne({ order: order._id });
-    if (existing) {
-      return existing;
+    if (!order?.email) {
+      const err = new Error('Order has no customer email — cannot send completion mail');
+      logger.error(err.message, { orderId: order?._id });
+      throw err;
     }
 
-    const feedback = await Feedback.createForOrder(order);
-    order.feedbackStatus = 'pending';
-    await order.save();
+    let feedback = await Feedback.findOne({ order: order._id });
+    if (!feedback) {
+      feedback = await Feedback.createForOrder(order);
+      order.feedbackStatus = 'pending';
+      await order.save();
+      logger.info('Feedback link created', {
+        orderId: order._id,
+        token: feedback.token,
+      });
+    }
 
     await emailService.sendOrderSuccessWithFeedback(order, feedback.token);
-    logger.info('Feedback link created', { orderId: order._id, token: feedback.token });
+    logger.info('Order completion email queued', {
+      orderId: order._id,
+      email: order.email,
+    });
     return feedback;
   },
 

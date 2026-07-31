@@ -11,6 +11,7 @@ const {
     changePassword
 } = require('../controllers/adminController');
 const { verifyToken } = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimiter');
 const {
   getNotifications,
   markAsRead,
@@ -21,22 +22,14 @@ console.log('🔧 Loading Admin Routes...');
 
 // ============================================
 // PUBLIC ROUTES (No authentication required)
+// Rate-limit only auth-sensitive endpoints (not notifications polling)
 // ============================================
 
-// Register Admin (First time setup)
-router.post('/register', registerAdmin);
-
-// Login Admin
-router.post('/login', loginAdmin);
-
-// Forgot Password - Send OTP
-router.post('/forgot-password', forgotPassword);
-
-// Verify OTP
-router.post('/verify-otp', verifyOTP);
-
-// Reset Password with OTP
-router.post('/reset-password-otp', resetPasswordWithOTP);
+router.post('/register', authLimiter, registerAdmin);
+router.post('/login', authLimiter, loginAdmin);
+router.post('/forgot-password', authLimiter, forgotPassword);
+router.post('/verify-otp', authLimiter, verifyOTP);
+router.post('/reset-password-otp', authLimiter, resetPasswordWithOTP);
 
 // Logout
 router.post('/logout', logoutAdmin);
@@ -51,10 +44,12 @@ router.get('/profile', verifyToken, getCurrentAdmin);
 // Change Password (Logged in)
 router.put('/change-password', verifyToken, changePassword);
 
-// Notifications
+// Notifications (PATCH + PUT for broader proxy/CORS compatibility)
 router.get('/notifications', verifyToken, getNotifications);
 router.patch('/notifications/read-all', verifyToken, markAllAsRead);
+router.put('/notifications/read-all', verifyToken, markAllAsRead);
 router.patch('/notifications/:id/read', verifyToken, markAsRead);
+router.put('/notifications/:id/read', verifyToken, markAsRead);
 
 console.log('✅ Admin Routes Loaded Successfully');
 
