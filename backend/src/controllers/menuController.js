@@ -65,7 +65,7 @@ exports.getMenuItems = async (req, res) => {
     );
 
     res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=30');
-    res.json({ success: true, data: normalizeMenuList(items) });
+    res.json({ success: true, data: normalizeMenuList(items, req) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -77,7 +77,7 @@ exports.getMenuItem = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    res.json({ success: true, data: normalizeMenuMedia(item) });
+    res.json({ success: true, data: normalizeMenuMedia(item, req) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -139,7 +139,7 @@ exports.createMenuItem = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      data: normalizeMenuMedia(populated),
+      data: normalizeMenuMedia(populated, req),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -216,7 +216,7 @@ exports.updateMenuItem = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Product updated successfully',
-      data: normalizeMenuMedia(populated),
+      data: normalizeMenuMedia(populated, req),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -329,7 +329,7 @@ exports.createCombo = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Combo created successfully',
-      data: normalizeMenuMedia(populated),
+      data: normalizeMenuMedia(populated, req),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -407,7 +407,7 @@ exports.updateCombo = async (req, res) => {
 
     await combo.save();
     const populated = await populateMenu(Menu.findById(combo._id).lean());
-    res.json({ success: true, data: normalizeMenuMedia(populated) });
+    res.json({ success: true, data: normalizeMenuMedia(populated, req) });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
