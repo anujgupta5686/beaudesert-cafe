@@ -23,7 +23,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Loader2,
   Mail,
+  RefreshCw,
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -48,12 +50,14 @@ const Messages = () => {
   })
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<ContactMessage | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const fetchMessages = async () => {
+  const fetchMessages = async (silent = false) => {
     try {
-      setLoading(true)
+      if (silent) setRefreshing(true)
+      else setLoading(true)
       const res = await axios.get("/contact", { params: { page, limit: 20 } })
       setMessages(res.data.data || [])
       if (res.data.meta) setMeta(res.data.meta)
@@ -61,6 +65,7 @@ const Messages = () => {
       toast.error("Failed to load messages")
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -108,12 +113,27 @@ const Messages = () => {
             Contact form submissions from customers
           </p>
         </div>
-        <div className="flex items-center gap-3 rounded-xl border bg-primary/5 px-4 py-2">
-          <Mail className="h-5 w-5 text-primary" />
-          <span className="text-sm text-muted-foreground">Unread</span>
-          <span className="text-xl font-bold text-primary">
-            {loading ? "..." : meta.unread}
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            className="cursor-pointer"
+            disabled={loading || refreshing}
+            onClick={() => fetchMessages(true)}
+          >
+            {refreshing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+          <div className="flex items-center gap-3 rounded-xl border bg-primary/5 px-4 py-2">
+            <Mail className="h-5 w-5 text-primary" />
+            <span className="text-sm text-muted-foreground">Unread</span>
+            <span className="text-xl font-bold text-primary">
+              {loading ? "..." : meta.unread}
+            </span>
+          </div>
         </div>
       </div>
 

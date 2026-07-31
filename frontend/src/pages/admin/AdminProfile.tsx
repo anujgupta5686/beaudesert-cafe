@@ -1,15 +1,23 @@
-import { useState } from "react"
-import { useAppSelector } from "@/store/hooks"
+import { useEffect, useState } from "react"
+import { useAppDispatch, useAppSelector } from "@/store/hooks"
+import { setAdmin } from "@/store/slices/authSlice"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { User, Mail, Lock, Eye, EyeOff } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { User, Mail, Lock, Eye, EyeOff, Camera, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import axios from "@/api/axios"
+import { resolveMediaUrl } from "@/lib/mediaUrl"
 
 const AdminProfile = () => {
+  const dispatch = useAppDispatch()
   const { admin } = useAppSelector((state) => state.auth)
+  const [name, setName] = useState(admin?.name || "")
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [savingProfile, setSavingProfile] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -19,6 +27,72 @@ const AdminProfile = () => {
     newPassword: "",
     confirmPassword: "",
   })
+
+  useEffect(() => {
+    setName(admin?.name || "")
+  }, [admin?.name])
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+    }
+  }, [avatarPreview])
+
+  const initials = (admin?.name || admin?.email || "A")
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
+
+  const currentAvatar = avatarPreview
+    ? avatarPreview
+    : admin?.avatar
+      ? resolveMediaUrl(admin.avatar)
+      : ""
+
+  const onPickAvatar = (file: File | null) => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+    setAvatarFile(file)
+    setAvatarPreview(file ? URL.createObjectURL(file) : null)
+  }
+
+  const handleProfileSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      toast.error("Name is required")
+      return
+    }
+    setSavingProfile(true)
+    try {
+      const form = new FormData()
+      form.append("name", name.trim())
+      if (avatarFile) form.append("avatar", avatarFile)
+
+      const res = await axios.put("/admin/profile", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      const updated = res.data.data
+      dispatch(
+        setAdmin({
+          id: String(updated.id),
+          email: updated.email,
+          name: updated.name,
+          avatar: updated.avatar || "",
+        })
+      )
+      onPickAvatar(null)
+      toast.success("Profile updated successfully")
+    } catch (error: unknown) {
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Failed to update profile"
+      toast.error(message)
+    } finally {
+      setSavingProfile(false)
+    }
+  }
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPasswordData({
@@ -52,8 +126,12 @@ const AdminProfile = () => {
         newPassword: "",
         confirmPassword: "",
       })
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to change password")
+    } catch (error: unknown) {
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Failed to change password"
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -61,45 +139,91 @@ const AdminProfile = () => {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-bold">Profile Settings</h1>
+      <h1 className="mb-6 text-3xl font-bold tracking-tight">Profile Settings</h1>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Profile Info Card */}
-        <Card className="border-0 shadow-sm">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5 text-primary" />
               Profile Information
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1">
-              <Label className="text-sm text-muted-foreground">Name</Label>
-              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <User className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">{admin?.name || "Admin"}</span>
+          <CardContent>
+            <form onSubmit={handleProfileSave} className="space-y-5">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <Avatar className="size-20 rounded-2xl">
+                    {currentAvatar ? (
+                      <AvatarImage src={currentAvatar} alt={name || "Admin"} />
+                    ) : null}
+                    <AvatarFallback className="rounded-2xl bg-primary/15 text-lg font-semibold text-primary">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <label className="absolute -right-1 -bottom-1 flex size-8 cursor-pointer items-center justify-center rounded-full border bg-background shadow-sm hover:bg-muted">
+                    <Camera className="size-3.5" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) =>
+                        onPickAvatar(e.target.files?.[0] || null)
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    {admin?.name || "Admin"}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {admin?.email}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Click the camera to update your photo
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-sm text-muted-foreground">Email</Label>
-              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">
-                  {admin?.email || "admin@cafe.com"}
-                </span>
+
+              <div className="space-y-2">
+                <Label htmlFor="profileName">Name</Label>
+                <Input
+                  id="profileName"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-11"
+                  required
+                />
               </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-sm text-muted-foreground">Role</Label>
-              <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-3">
-                <span className="font-medium">Administrator</span>
+
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <div className="flex h-11 items-center gap-2 rounded-lg border bg-muted/40 px-3 text-sm">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="truncate">{admin?.email || "—"}</span>
+                </div>
               </div>
-            </div>
+
+              <Button
+                type="submit"
+                className="w-full cursor-pointer"
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save profile"
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 
-        {/* Change Password Card */}
-        <Card className="border-0 shadow-sm">
+        <Card className="border shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-primary" />
@@ -123,7 +247,7 @@ const AdminProfile = () => {
                   />
                   <button
                     type="button"
-                    className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                   >
                     {showCurrentPassword ? (
@@ -150,7 +274,7 @@ const AdminProfile = () => {
                   />
                   <button
                     type="button"
-                    className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                   >
                     {showNewPassword ? (
@@ -177,8 +301,10 @@ const AdminProfile = () => {
                   />
                   <button
                     type="button"
-                    className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+                    onClick={() =>
+                      setShowConfirmPassword(!showConfirmPassword)
+                    }
                   >
                     {showConfirmPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -189,7 +315,11 @@ const AdminProfile = () => {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button
+                type="submit"
+                className="w-full cursor-pointer"
+                disabled={loading}
+              >
                 {loading ? "Updating..." : "Update Password"}
               </Button>
             </form>

@@ -20,6 +20,10 @@ const adminSchema = new mongoose.Schema({
         required: true,
         default: 'Admin'
     },
+    avatar: {
+        type: String,
+        default: '',
+    },
     resetPasswordOTP: {
         type: String,
         default: null

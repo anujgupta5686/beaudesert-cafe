@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select"
 import { OrderDetailsDialog } from "@/components/shared/OrderDetailsDialog"
 import { formatPrice } from "@/lib/formatPrice"
+import { formatPhoneDisplay } from "@/lib/phone"
 import {
   Search,
   ShoppingBag,
@@ -32,6 +33,8 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  RefreshCw,
 } from "lucide-react"
 import type { Order } from "@/types"
 import { toast } from "sonner"
@@ -53,6 +56,7 @@ const Orders = () => {
     totalPages: 1,
   })
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [searchInput, setSearchInput] = useState("")
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("all")
@@ -77,9 +81,10 @@ const Orders = () => {
     setPage(1)
   }, 400)
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (silent = false) => {
     try {
-      setLoading(true)
+      if (silent) setRefreshing(true)
+      else setLoading(true)
       const response = await axios.get("/orders", {
         params: {
           search: search || undefined,
@@ -96,6 +101,7 @@ const Orders = () => {
       toast.error("Failed to load orders")
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -167,12 +173,27 @@ const Orders = () => {
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
-        <div className="flex items-center gap-3 rounded-xl border bg-primary/5 px-4 py-2">
-          <ShoppingBag className="h-5 w-5 text-primary" />
-          <span className="text-sm text-muted-foreground">Total</span>
-          <span className="text-xl font-bold text-primary">
-            {loading ? "..." : meta.total}
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            className="cursor-pointer"
+            disabled={loading || refreshing}
+            onClick={() => fetchOrders(true)}
+          >
+            {refreshing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+          <div className="flex items-center gap-3 rounded-xl border bg-primary/5 px-4 py-2">
+            <ShoppingBag className="h-5 w-5 text-primary" />
+            <span className="text-sm text-muted-foreground">Total</span>
+            <span className="text-xl font-bold text-primary">
+              {loading ? "..." : meta.total}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -237,6 +258,7 @@ const Orders = () => {
                 <TableHead>Order ID</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead className="hidden md:table-cell">Email</TableHead>
+                <TableHead className="hidden lg:table-cell">Mobile</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Status</TableHead>
@@ -246,13 +268,13 @@ const Orders = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-12 text-center">
+                  <TableCell colSpan={8} className="py-12 text-center">
                     <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-12 text-center">
+                  <TableCell colSpan={8} className="py-12 text-center">
                     <ShoppingBag className="mx-auto mb-2 h-10 w-10 opacity-30" />
                     <p className="font-medium">
                       {search ? "No orders match your search" : "No orders yet"}
@@ -284,6 +306,13 @@ const Orders = () => {
                         </TableCell>
                         <TableCell className="hidden text-sm md:table-cell">
                           {order.email || "—"}
+                        </TableCell>
+                        <TableCell className="hidden text-sm tabular-nums lg:table-cell">
+                          {formatPhoneDisplay(
+                            order.countryCode,
+                            order.mobile,
+                            order.countryIso
+                          )}
                         </TableCell>
                         <TableCell>{order.items.length} items</TableCell>
                         <TableCell className="text-right font-bold text-primary">

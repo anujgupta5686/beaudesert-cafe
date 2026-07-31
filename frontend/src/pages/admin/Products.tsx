@@ -1,10 +1,11 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   useDeleteProductMutation,
-  useMenuQuery,
   useUpdateProductMutation,
 } from "@/hooks/useMenuQueries"
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback"
+import axios from "@/api/axios"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -27,32 +28,91 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { TablePager } from "@/components/admin/TablePager"
 import { formatPrice } from "@/lib/formatPrice"
 import { Loader2, Plus, Search, Edit, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { MenuItem } from "@/types"
 import { getProductImages } from "@/lib/productImages"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/queryClient"
+
+type Meta = {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+const PAGE_SIZE = 25
 
 const Products = () => {
   const navigate = useNavigate()
-  const { data: items = [], isLoading, isError, refetch, isFetching } =
-    useMenuQuery({ includeUnavailable: true })
+  const queryClient = useQueryClient()
   const updateProduct = useUpdateProductMutation()
   const deleteProduct = useDeleteProductMutation()
-  const [searchTerm, setSearchTerm] = useState("")
+
+  const [items, setItems] = useState<MenuItem[]>([])
+  const [meta, setMeta] = useState<Meta>({
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+  })
+  const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState("")
+  const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState<"normal" | "combo">("normal")
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [isError, setIsError] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
-  const filteredItems = items.filter((item) => {
-    const type = item.productType || "normal"
-    const matchesType = type === activeTab
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesType && matchesSearch
-  })
+  const debouncedSearch = useDebouncedCallback((value: string) => {
+    setSearch(value)
+    setPage(1)
+  }, 350)
+
+  const fetchProducts = async (silent = false) => {
+    try {
+      if (silent) setRefreshing(true)
+      else setLoading(true)
+      setIsError(false)
+      const res = await axios.get("/menu", {
+        params: {
+          type: activeTab,
+          search: search || undefined,
+          page,
+          limit: PAGE_SIZE,
+          includeUnavailable: "true",
+        },
+      })
+      setItems(res.data.data || [])
+      if (res.data.meta) setMeta(res.data.meta)
+      else {
+        const list = res.data.data || []
+        setMeta({
+          page: 1,
+          limit: list.length || PAGE_SIZE,
+          total: list.length,
+          totalPages: 1,
+        })
+      }
+    } catch {
+      setIsError(true)
+      toast.error("Failed to load products")
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchProducts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, search, page])
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -60,6 +120,8 @@ const Products = () => {
       await deleteProduct.mutateAsync(deleteId)
       toast.success("Product deleted successfully")
       setDeleteId(null)
+      queryClient.invalidateQueries({ queryKey: queryKeys.menu.all })
+      fetchProducts(true)
     } catch {
       toast.error("Failed to delete product")
     }
@@ -85,6 +147,7 @@ const Products = () => {
       }
       await updateProduct.mutateAsync({ id: item._id, data: fd })
       toast.success(next ? "Marked available" : "Marked sold out")
+      fetchProducts(true)
     } catch {
       toast.error("Failed to update availability")
     } finally {
@@ -107,10 +170,10 @@ const Products = () => {
           <Button
             variant="outline"
             className="cursor-pointer"
-            disabled={isFetching}
-            onClick={() => refetch()}
+            disabled={refreshing || loading}
+            onClick={() => fetchProducts(true)}
           >
-            {isFetching ? (
+            {refreshing ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : null}
             Refresh
@@ -130,7 +193,10 @@ const Products = () => {
           size="sm"
           className="cursor-pointer"
           variant={activeTab === "normal" ? "default" : "outline"}
-          onClick={() => setActiveTab("normal")}
+          onClick={() => {
+            setActiveTab("normal")
+            setPage(1)
+          }}
         >
           Normal
         </Button>
@@ -138,7 +204,10 @@ const Products = () => {
           size="sm"
           className="cursor-pointer"
           variant={activeTab === "combo" ? "default" : "outline"}
-          onClick={() => setActiveTab("combo")}
+          onClick={() => {
+            setActiveTab("combo")
+            setPage(1)
+          }}
         >
           Combo
         </Button>
@@ -149,8 +218,11 @@ const Products = () => {
           <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search products..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchInput}
+            onChange={(e) => {
+              setSearchInput(e.target.value)
+              debouncedSearch(e.target.value)
+            }}
             className="pl-10"
           />
         </div>
@@ -162,7 +234,7 @@ const Products = () => {
           <button
             type="button"
             className="cursor-pointer font-medium underline"
-            onClick={() => refetch()}
+            onClick={() => fetchProducts()}
           >
             Retry
           </button>
@@ -182,20 +254,20 @@ const Products = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {loading ? (
               <TableRow>
                 <TableCell colSpan={6} className="py-10 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
                 </TableCell>
               </TableRow>
-            ) : filteredItems.length === 0 ? (
+            ) : items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center">
                   No products found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item) => {
+              items.map((item) => {
                 const available = item.isAvailable !== false
                 return (
                   <TableRow
@@ -266,6 +338,14 @@ const Products = () => {
           </TableBody>
         </Table>
       </div>
+
+      <TablePager
+        page={meta.page}
+        totalPages={meta.totalPages}
+        total={meta.total}
+        disabled={loading || refreshing}
+        onPageChange={setPage}
+      />
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>

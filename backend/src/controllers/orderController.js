@@ -4,6 +4,7 @@ const emailService = require('../services/emailService');
 const feedbackService = require('../services/feedbackService');
 const notificationService = require('../services/notificationService');
 const { generateOrderNumber } = require('../utils/orderNumber');
+const { validateOrderPhone } = require('../utils/phone');
 const logger = require('../utils/logger');
 
 const resolveUnitPrice = (menuItem, size) => {
@@ -21,6 +22,9 @@ exports.createOrder = async (req, res) => {
       customerName,
       email,
       mobile,
+      countryCode,
+      countryIso,
+      fullMobile,
       address,
       specialInstructions,
       items,
@@ -38,6 +42,19 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'A valid email is required',
+      });
+    }
+
+    const phone = validateOrderPhone({
+      mobile,
+      countryCode,
+      countryIso,
+      fullMobile,
+    });
+    if (!phone.ok) {
+      return res.status(400).json({
+        success: false,
+        message: phone.message,
       });
     }
 
@@ -96,7 +113,10 @@ exports.createOrder = async (req, res) => {
           orderNumber: generateOrderNumber(),
           customerName,
           email: customerEmail,
-          mobile,
+          mobile: phone.mobile,
+          countryCode: phone.countryCode,
+          countryIso: phone.countryIso,
+          fullMobile: phone.fullMobile,
           address,
           specialInstructions: specialInstructions || '',
           items: validatedItems,
@@ -251,6 +271,98 @@ exports.getCustomerCount = async (req, res) => {
 
     const totalCustomers = customers[0]?.totalCustomers || 0;
     res.json({ success: true, data: { totalCustomers } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Dashboard overview — aggregation scales with large order volumes.
+ */
+exports.getDashboardStats = async (req, res) => {
+  try {
+    const [orderTotal, customerAgg, topCustomers, topProducts, recentOrders] =
+      await Promise.all([
+        Order.countDocuments(),
+        Order.aggregate([
+          {
+            $group: {
+              _id: { customerName: '$customerName', mobile: '$mobile' },
+            },
+          },
+          { $count: 'totalCustomers' },
+        ]),
+        Order.aggregate([
+          {
+            $group: {
+              _id: { name: '$customerName', mobile: '$mobile' },
+              totalOrders: { $sum: 1 },
+              totalSpent: { $sum: { $ifNull: ['$totalAmount', 0] } },
+            },
+          },
+          { $sort: { totalSpent: -1 } },
+          { $limit: 10 },
+          {
+            $project: {
+              _id: 0,
+              name: '$_id.name',
+              mobile: '$_id.mobile',
+              totalOrders: 1,
+              totalSpent: 1,
+            },
+          },
+        ]),
+        Order.aggregate([
+          { $unwind: '$items' },
+          {
+            $group: {
+              _id: {
+                key: {
+                  $ifNull: ['$items.menuItemId', '$items.name'],
+                },
+                name: '$items.name',
+              },
+              count: { $sum: { $ifNull: ['$items.quantity', 1] } },
+              revenue: {
+                $sum: {
+                  $multiply: [
+                    { $ifNull: ['$items.price', 0] },
+                    { $ifNull: ['$items.quantity', 1] },
+                  ],
+                },
+              },
+            },
+          },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+          {
+            $project: {
+              _id: 0,
+              name: '$_id.name',
+              count: 1,
+              revenue: 1,
+            },
+          },
+        ]),
+        Order.find()
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .select(
+            'orderNumber customerName mobile items totalAmount status createdAt'
+          )
+          .lean(),
+      ]);
+
+    res.json({
+      success: true,
+      data: {
+        orderTotal,
+        customerCount: customerAgg[0]?.totalCustomers || 0,
+        topCustomers,
+        topProducts,
+        recentOrders,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
