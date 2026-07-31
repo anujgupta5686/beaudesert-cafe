@@ -26,11 +26,6 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    /** Optional GPS from checkout "Use current location" */
-    location: {
-      lat: { type: Number, default: null },
-      lng: { type: Number, default: null },
-    },
     specialInstructions: {
       type: String,
       default: '',

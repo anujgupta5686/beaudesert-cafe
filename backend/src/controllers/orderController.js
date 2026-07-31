@@ -24,7 +24,6 @@ exports.createOrder = async (req, res) => {
       address,
       specialInstructions,
       items,
-      location,
     } = req.body;
 
     if (!customerName || !email || !mobile || !address || !items?.length) {
@@ -34,21 +33,11 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    const lat =
-      location?.lat != null && Number.isFinite(Number(location.lat))
-        ? Number(location.lat)
-        : null;
-    const lng =
-      location?.lng != null && Number.isFinite(Number(location.lng))
-        ? Number(location.lng)
-        : null;
-    if (
-      (lat != null && (lat < -90 || lat > 90)) ||
-      (lng != null && (lng < -180 || lng > 180))
-    ) {
+    const customerEmail = String(email).trim().toLowerCase();
+    if (!customerEmail.includes('@')) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid location coordinates',
+        message: 'A valid email is required',
       });
     }
 
@@ -106,10 +95,9 @@ exports.createOrder = async (req, res) => {
         order = await Order.create({
           orderNumber: generateOrderNumber(),
           customerName,
-          email,
+          email: customerEmail,
           mobile,
           address,
-          location: { lat, lng },
           specialInstructions: specialInstructions || '',
           items: validatedItems,
           totalAmount,

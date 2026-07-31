@@ -7,19 +7,15 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useCart } from "@/hooks/useCart"
 import { formatPrice } from "@/lib/formatPrice"
-import { ArrowLeft, Crosshair, Loader2, MapPin } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import axios from "@/api/axios"
 import { toast } from "sonner"
 import { useState } from "react"
-
-type LocationCoords = { lat: number; lng: number }
 
 const Checkout = () => {
   const navigate = useNavigate()
   const { items, totalPrice, clearCart } = useCart()
   const [loading, setLoading] = useState(false)
-  const [locating, setLocating] = useState(false)
-  const [location, setLocation] = useState<LocationCoords | null>(null)
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
@@ -38,58 +34,6 @@ const Checkout = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
 
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Location is not supported in this browser")
-      return
-    }
-    setLocating(true)
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude
-        const lng = pos.coords.longitude
-        setLocation({ lat, lng })
-
-        // Best-effort reverse geocode to fill address (OpenStreetMap Nominatim)
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
-            {
-              headers: {
-                Accept: "application/json",
-              },
-            }
-          )
-          if (res.ok) {
-            const data = (await res.json()) as { display_name?: string }
-            if (data.display_name) {
-              setFormData((prev) => ({
-                ...prev,
-                address: prev.address.trim()
-                  ? prev.address
-                  : data.display_name!,
-              }))
-            }
-          }
-        } catch {
-          /* address can still be typed manually */
-        }
-
-        toast.success("Current location captured")
-        setLocating(false)
-      },
-      (err) => {
-        setLocating(false)
-        const msg =
-          err.code === err.PERMISSION_DENIED
-            ? "Location permission denied — allow location or type your address"
-            : "Could not get current location"
-        toast.error(msg)
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60_000 }
-    )
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -97,7 +41,6 @@ const Checkout = () => {
     try {
       const orderData = {
         ...formData,
-        location: location || undefined,
         items: items.map((item) => ({
           menuItemId: item._id,
           name: item.name,
@@ -120,12 +63,8 @@ const Checkout = () => {
         } else {
           toast.success("Order placed successfully!")
           if (response.data.emailError) {
-            toast.warning(
+            toast.error(
               `Confirmation email could not be sent: ${response.data.emailError}`
-            )
-          } else {
-            toast.message(
-              "Confirmation email may be delayed — check spam if it does not arrive."
             )
           }
         }
@@ -215,27 +154,9 @@ const Checkout = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label htmlFor="address">
-                      Delivery Address{" "}
-                      <span className="text-destructive">*</span>
-                    </Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={useCurrentLocation}
-                      disabled={locating}
-                    >
-                      {locating ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Crosshair className="mr-1.5 h-3.5 w-3.5" />
-                      )}
-                      Use current location
-                    </Button>
-                  </div>
+                  <Label htmlFor="address">
+                    Delivery Address <span className="text-destructive">*</span>
+                  </Label>
                   <Textarea
                     id="address"
                     name="address"
@@ -246,13 +167,6 @@ const Checkout = () => {
                     rows={2}
                     className="resize-none"
                   />
-                  {location && (
-                    <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-                      <MapPin className="h-3.5 w-3.5" />
-                      GPS saved ({location.lat.toFixed(5)},{" "}
-                      {location.lng.toFixed(5)}) — admin can open this on Maps
-                    </p>
-                  )}
                 </div>
 
                 <div className="space-y-2">

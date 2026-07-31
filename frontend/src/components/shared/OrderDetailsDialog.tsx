@@ -21,8 +21,6 @@ import {
   Package,
 } from "lucide-react"
 import type { Order } from "@/types"
-import { LocationMapThumb } from "@/components/shared/LocationMapThumb"
-import { hasValidCoords } from "@/lib/maps"
 
 interface OrderDetailsDialogProps {
   order: Order | null
@@ -104,15 +102,6 @@ export function OrderDetailsDialog({
                 className="sm:col-span-2"
               />
             </div>
-            {(hasValidCoords(order.location) || order.address) && (
-              <div className="mt-3">
-                <LocationMapThumb
-                  location={order.location}
-                  address={order.address}
-                  variant="card"
-                />
-              </div>
-            )}
             {order.specialInstructions && (
               <div className="mt-3 rounded-xl border bg-muted/40 p-3">
                 <p className="text-xs font-medium text-muted-foreground">

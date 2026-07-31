@@ -5,31 +5,53 @@ const logger = require('../utils/logger');
 
 const feedbackService = {
   /**
-   * Create feedback token (if needed) and always send the
-   * "order completed + feedback" email to the customer.
+   * Create feedback token (if needed) and send "order completed"
+   * email to the customer's order.email.
    */
   async createAndEmail(order) {
-    if (!order?.email) {
-      const err = new Error('Order has no customer email — cannot send completion mail');
+    const customerEmail = String(order?.email || '')
+      .trim()
+      .toLowerCase();
+
+    if (!customerEmail || !customerEmail.includes('@')) {
+      const err = new Error(
+        'Order has no customer email — cannot send completion mail'
+      );
       logger.error(err.message, { orderId: order?._id });
       throw err;
     }
 
+    // Keep email on the in-memory order object in case it was missing casing/spaces
+    order.email = customerEmail;
+
     let feedback = await Feedback.findOne({ order: order._id });
     if (!feedback) {
-      feedback = await Feedback.createForOrder(order);
-      order.feedbackStatus = 'pending';
-      await order.save();
-      logger.info('Feedback link created', {
-        orderId: order._id,
-        token: feedback.token,
-      });
+      try {
+        feedback = await Feedback.createForOrder(order);
+        order.feedbackStatus = 'pending';
+        await order.save();
+        logger.info('Feedback link created', {
+          orderId: order._id,
+          token: feedback.token,
+        });
+      } catch (err) {
+        // Race: another request created it
+        if (err.code === 11000) {
+          feedback = await Feedback.findOne({ order: order._id });
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!feedback?.token) {
+      throw new Error('Could not create feedback link for completion email');
     }
 
     await emailService.sendOrderSuccessWithFeedback(order, feedback.token);
-    logger.info('Order completion email queued', {
+    logger.info('Order completion email sent', {
       orderId: order._id,
-      email: order.email,
+      email: customerEmail,
     });
     return feedback;
   },

@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { OrderDetailsDialog } from "@/components/shared/OrderDetailsDialog"
-import { LocationMapThumb } from "@/components/shared/LocationMapThumb"
 import { formatPrice } from "@/lib/formatPrice"
 import {
   Search,
@@ -126,15 +125,11 @@ const Orders = () => {
       const res = await axios.put(`/orders/${orderId}/status`, {
         status: "success",
       })
+      toast.success("Order marked as completed")
       if (res.data?.emailSent) {
-        toast.success(
-          res.data.message ||
-            "Order completed — confirmation email sent to customer"
-        )
-      } else if (res.data?.message) {
-        toast.success(res.data.message)
-      } else {
-        toast.success("Order marked as completed")
+        toast.success("Completion email sent to the customer")
+      } else if (res.data?.emailError) {
+        toast.error(`Could not send email: ${res.data.emailError}`)
       }
       fetchOrders()
     } catch (error: unknown) {
@@ -244,7 +239,6 @@ const Orders = () => {
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-center">Location</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-center">Action</TableHead>
               </TableRow>
@@ -252,13 +246,13 @@ const Orders = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-12 text-center">
+                  <TableCell colSpan={7} className="py-12 text-center">
                     <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
                   </TableCell>
                 </TableRow>
               ) : orders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-12 text-center">
+                  <TableCell colSpan={7} className="py-12 text-center">
                     <ShoppingBag className="mx-auto mb-2 h-10 w-10 opacity-30" />
                     <p className="font-medium">
                       {search ? "No orders match your search" : "No orders yet"}
@@ -294,13 +288,6 @@ const Orders = () => {
                         <TableCell>{order.items.length} items</TableCell>
                         <TableCell className="text-right font-bold text-primary">
                           {formatPrice(order.totalAmount)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <LocationMapThumb
-                            location={order.location}
-                            address={order.address}
-                            size={52}
-                          />
                         </TableCell>
                         <TableCell>
                           {getStatusBadge(order.status || "pending")}
