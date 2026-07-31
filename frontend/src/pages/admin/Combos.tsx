@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/tooltip"
 import { formatPrice } from "@/lib/formatPrice"
 import { resolveMediaUrl } from "@/lib/mediaUrl"
+import { SearchableSelect } from "@/components/shared/SearchableSelect"
 import { Image as ImageIcon, Loader2, Trash2, Layers, Upload, X, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -442,21 +443,22 @@ const Combos = () => {
                                 )}
                               </Tooltip>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="min-w-[140px]">
                               {selected && item.hasVariants ? (
-                                <select
-                                  className="h-8 cursor-pointer rounded-md border bg-background px-2 text-xs"
+                                <SearchableSelect
                                   value={picks[item._id]?.variantLabel || ""}
-                                  onChange={(e) =>
-                                    setPickSize(item._id, e.target.value)
+                                  onValueChange={(v) =>
+                                    setPickSize(item._id, v)
                                   }
-                                >
-                                  {item.variants?.map((v) => (
-                                    <option key={v.label} value={v.label}>
-                                      {v.label} ({formatPrice(v.price)})
-                                    </option>
-                                  ))}
-                                </select>
+                                  placeholder="Select size"
+                                  searchPlaceholder="Search size"
+                                  emptyText="No sizes"
+                                  className="[&_button]:h-9 [&_button]:text-xs"
+                                  options={(item.variants || []).map((v) => ({
+                                    value: v.label,
+                                    label: `${v.label} (${formatPrice(v.price)})`,
+                                  }))}
+                                />
                               ) : item.hasVariants ? (
                                 <span className="text-xs text-muted-foreground">
                                   Select to choose size

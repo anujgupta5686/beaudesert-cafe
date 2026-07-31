@@ -19,14 +19,10 @@ import {
   Phone,
   User,
   Package,
-  ExternalLink,
 } from "lucide-react"
 import type { Order } from "@/types"
-import {
-  googleMapsUrl,
-  hasValidCoords,
-  staticMapPreviewUrl,
-} from "@/lib/maps"
+import { LocationMapThumb } from "@/components/shared/LocationMapThumb"
+import { hasValidCoords } from "@/lib/maps"
 
 interface OrderDetailsDialogProps {
   order: Order | null
@@ -108,38 +104,14 @@ export function OrderDetailsDialog({
                 className="sm:col-span-2"
               />
             </div>
-            {hasValidCoords(order.location) && (
-              <a
-                href={googleMapsUrl(order.location.lat, order.location.lng)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 flex items-center gap-3 rounded-xl border bg-muted/30 p-3 transition hover:border-primary/40 hover:bg-primary/5"
-              >
-                <img
-                  src={staticMapPreviewUrl(
-                    order.location.lat,
-                    order.location.lng,
-                    "160x120"
-                  )}
-                  alt="Customer location"
-                  width={96}
-                  height={72}
-                  className="h-[72px] w-24 shrink-0 rounded-lg object-cover"
+            {(hasValidCoords(order.location) || order.address) && (
+              <div className="mt-3">
+                <LocationMapThumb
+                  location={order.location}
+                  address={order.address}
+                  variant="card"
                 />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground">
-                    Current location
-                  </p>
-                  <p className="text-sm font-medium">
-                    {order.location.lat.toFixed(5)},{" "}
-                    {order.location.lng.toFixed(5)}
-                  </p>
-                  <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                    Open in Google Maps
-                    <ExternalLink className="h-3 w-3" />
-                  </p>
-                </div>
-              </a>
+              </div>
             )}
             {order.specialInstructions && (
               <div className="mt-3 rounded-xl border bg-muted/40 p-3">

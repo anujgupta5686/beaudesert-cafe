@@ -23,12 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { OrderDetailsDialog } from "@/components/shared/OrderDetailsDialog"
+import { LocationMapThumb } from "@/components/shared/LocationMapThumb"
 import { formatPrice } from "@/lib/formatPrice"
-import {
-  googleMapsUrl,
-  hasValidCoords,
-  staticMapPreviewUrl,
-} from "@/lib/maps"
 import {
   Search,
   ShoppingBag,
@@ -37,7 +33,6 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
-  MapPin,
 } from "lucide-react"
 import type { Order } from "@/types"
 import { toast } from "sonner"
@@ -211,7 +206,7 @@ const Orders = () => {
           <SelectTrigger className="h-11 w-full min-w-[160px] cursor-pointer lg:w-[180px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="bottom" align="start">
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="success">Completed</SelectItem>
@@ -229,7 +224,7 @@ const Orders = () => {
           <SelectTrigger className="h-11 w-full min-w-[180px] cursor-pointer lg:w-[210px]">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="bottom" align="start">
             <SelectItem value="createdAt-desc">Newest first</SelectItem>
             <SelectItem value="createdAt-asc">Oldest first</SelectItem>
             <SelectItem value="totalAmount-desc">Amount high → low</SelectItem>
@@ -274,9 +269,6 @@ const Orders = () => {
                 <AnimatePresence mode="popLayout">
                   {orders.map((order, i) => {
                     const completed = order.status === "success"
-                    const loc = hasValidCoords(order.location)
-                      ? order.location
-                      : null
                     return (
                       <motion.tr
                         key={order._id}
@@ -304,35 +296,11 @@ const Orders = () => {
                           {formatPrice(order.totalAmount)}
                         </TableCell>
                         <TableCell className="text-center">
-                          {loc ? (
-                            <a
-                              href={googleMapsUrl(loc.lat, loc.lng)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open in Google Maps"
-                              className="group inline-flex overflow-hidden rounded-md border border-primary/25 shadow-sm transition hover:border-primary/60 hover:ring-2 hover:ring-primary/20"
-                            >
-                              <img
-                                src={staticMapPreviewUrl(
-                                  loc.lat,
-                                  loc.lng,
-                                  "72x72"
-                                )}
-                                alt="Order location map"
-                                width={48}
-                                height={48}
-                                className="h-12 w-12 object-cover"
-                                loading="lazy"
-                              />
-                            </a>
-                          ) : (
-                            <span
-                              className="inline-flex h-12 w-12 items-center justify-center rounded-md border border-dashed bg-muted/40 text-muted-foreground"
-                              title={order.address || "No GPS pin"}
-                            >
-                              <MapPin className="h-4 w-4 opacity-50" />
-                            </span>
-                          )}
+                          <LocationMapThumb
+                            location={order.location}
+                            address={order.address}
+                            size={52}
+                          />
                         </TableCell>
                         <TableCell>
                           {getStatusBadge(order.status || "pending")}
