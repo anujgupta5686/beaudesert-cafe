@@ -69,7 +69,7 @@ const emailService = {
         <p style="margin:16px 0 0;font-size:18px;font-weight:bold;color:#b45309;">Total: ${formatMoney(order.totalAmount)}</p>
         ${chrome.infoBox(`
           <p style="margin:0;"><strong>Delivery:</strong> ${order.address}</p>
-          <p style="margin:6px 0 0;"><strong>Phone:</strong> ${order.mobile}</p>
+          <p style="margin:6px 0 0;"><strong>Phone:</strong> ${order.fullMobile || (order.countryCode ? `${order.countryCode} ${order.mobile}` : order.mobile)}</p>
         `, '#ecfdf5')}
       `,
     });
@@ -85,7 +85,7 @@ const emailService = {
           <p style="margin:0;"><strong>Order ID:</strong> ${orderIdLabel(order)}</p>
           <p style="margin:6px 0 0;"><strong>Customer:</strong> ${order.customerName}</p>
           <p style="margin:6px 0 0;"><strong>Email:</strong> ${order.email}</p>
-          <p style="margin:6px 0 0;"><strong>Mobile:</strong> ${order.mobile}</p>
+          <p style="margin:6px 0 0;"><strong>Mobile:</strong> ${order.fullMobile || (order.countryCode ? `${order.countryCode} ${order.mobile}` : order.mobile)}</p>
           <p style="margin:6px 0 0;"><strong>Address:</strong> ${order.address}</p>
         `, '#f4f4f5')}
         ${itemRows(order.items)}

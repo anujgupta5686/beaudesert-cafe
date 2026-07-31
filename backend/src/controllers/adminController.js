@@ -143,7 +143,8 @@ exports.loginAdmin = async (req, res) => {
                 admin: {
                     id: admin._id,
                     email: admin.email,
-                    name: admin.name
+                    name: admin.name,
+                    avatar: admin.avatar || '',
                 }
             }
         });
@@ -167,7 +168,8 @@ exports.getCurrentAdmin = async (req, res) => {
             data: {
                 id: req.admin._id,
                 email: req.admin.email,
-                name: req.admin.name
+                name: req.admin.name,
+                avatar: req.admin.avatar || '',
             }
         });
     } catch (error) {
@@ -175,6 +177,60 @@ exports.getCurrentAdmin = async (req, res) => {
         res.status(500).json({
             success: false,
             message: error.message
+        });
+    }
+};
+
+// Update profile name + optional avatar image
+exports.updateProfile = async (req, res) => {
+    try {
+        const admin = await Admin.findById(req.admin._id);
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: 'Admin not found',
+            });
+        }
+
+        const name = (req.body.name || '').trim();
+        if (name) {
+            admin.name = name;
+        }
+
+        const storageService = require('../services/storageService');
+        const files = storageService.collectImageFiles(req.files);
+        const single =
+            req.files?.avatar ||
+            req.files?.image ||
+            (files.length ? files[0] : null);
+
+        if (single) {
+            const uploaded = await storageService.uploadImage(
+                Array.isArray(single) ? single[0] : single,
+                'cafe_admin'
+            );
+            if (uploaded?.url) {
+                admin.avatar = uploaded.url;
+            }
+        }
+
+        await admin.save();
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: {
+                id: admin._id,
+                email: admin.email,
+                name: admin.name,
+                avatar: admin.avatar || '',
+            },
+        });
+    } catch (error) {
+        console.error('❌ Update profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to update profile',
         });
     }
 };

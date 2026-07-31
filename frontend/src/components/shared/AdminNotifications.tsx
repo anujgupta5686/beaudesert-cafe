@@ -138,7 +138,7 @@ export function AdminNotifications() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.16 }}
-            className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,320px)] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+            className="absolute top-full right-0 z-50 mt-2 w-[min(100vw-2rem,320px)] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10"
           >
             <div className="flex items-center justify-between border-b px-3 py-2.5">
               <p className="text-sm font-semibold">Notifications</p>

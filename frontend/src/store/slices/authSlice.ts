@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit"
+import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit"
 import axios from "@/api/axios"
 import type { Admin } from "@/types"
 
@@ -49,6 +49,10 @@ const authSlice = createSlice({
     clearError: (state) => {
       state.error = null
     },
+    setAdmin: (state, action: PayloadAction<Admin>) => {
+      state.admin = action.payload
+      localStorage.setItem("adminData", JSON.stringify(action.payload))
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -77,5 +81,5 @@ const authSlice = createSlice({
   },
 })
 
-export const { clearError } = authSlice.actions
+export const { clearError, setAdmin } = authSlice.actions
 export default authSlice.reducer

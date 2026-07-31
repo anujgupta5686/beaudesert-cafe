@@ -4,6 +4,7 @@ const {
     registerAdmin,
     loginAdmin,
     getCurrentAdmin,
+    updateProfile,
     forgotPassword,
     verifyOTP,
     resetPasswordWithOTP,
@@ -40,6 +41,9 @@ router.post('/logout', logoutAdmin);
 
 // Get Current Admin Profile
 router.get('/profile', verifyToken, getCurrentAdmin);
+
+// Update profile (name + avatar)
+router.put('/profile', verifyToken, updateProfile);
 
 // Change Password (Logged in)
 router.put('/change-password', verifyToken, changePassword);

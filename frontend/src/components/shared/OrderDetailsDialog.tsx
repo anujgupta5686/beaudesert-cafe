@@ -21,6 +21,7 @@ import {
   Package,
 } from "lucide-react"
 import type { Order } from "@/types"
+import { formatPhoneDisplay } from "@/lib/phone"
 
 interface OrderDetailsDialogProps {
   order: Order | null
@@ -94,7 +95,15 @@ export function OrderDetailsDialog({
                 label="Email"
                 value={order.email || "—"}
               />
-              <InfoTile icon={Phone} label="Mobile" value={order.mobile} />
+              <InfoTile
+                icon={Phone}
+                label="Mobile"
+                value={formatPhoneDisplay(
+                  order.countryCode,
+                  order.mobile,
+                  order.countryIso
+                )}
+              />
               <InfoTile
                 icon={MapPin}
                 label="Address"

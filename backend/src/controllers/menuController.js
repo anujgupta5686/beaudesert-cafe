@@ -35,7 +35,7 @@ const findComboSourceProducts = (ids) =>
 
 exports.getMenuItems = async (req, res) => {
   try {
-    const { type, category, active } = req.query;
+    const { type, category, active, page: pageQ, limit: limitQ, search } = req.query;
     const filter = {};
 
     if (type === 'normal' || type === 'combo') {
@@ -54,14 +54,44 @@ exports.getMenuItems = async (req, res) => {
     if (active !== 'false') {
       filter.isActive = { $ne: false };
     }
+    if (search && String(search).trim()) {
+      const regex = new RegExp(
+        String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i'
+      );
+      filter.$or = [{ name: regex }, { description: regex }];
+    }
+
+    const select =
+      'name description price image images category productType hasVariants variants comboItems originalPrice isActive isAvailable createdAt';
+
+    // Optional pagination for admin tables (keeps public menu as a full list)
+    const wantsPage = pageQ != null || limitQ != null;
+    if (wantsPage) {
+      const page = Math.max(1, Number(pageQ) || 1);
+      const limit = Math.min(100, Math.max(1, Number(limitQ) || 25));
+      const skip = (page - 1) * limit;
+      const [items, total] = await Promise.all([
+        populateMenu(
+          Menu.find(filter).select(select).sort({ createdAt: -1 }).skip(skip).limit(limit).lean()
+        ),
+        Menu.countDocuments(filter),
+      ]);
+      res.set('Cache-Control', 'private, max-age=5');
+      return res.json({
+        success: true,
+        data: normalizeMenuList(items, req),
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      });
+    }
 
     const items = await populateMenu(
-      Menu.find(filter)
-        .select(
-          'name description price image images category productType hasVariants variants comboItems originalPrice isActive isAvailable createdAt'
-        )
-        .sort({ createdAt: -1 })
-        .lean()
+      Menu.find(filter).select(select).sort({ createdAt: -1 }).lean()
     );
 
     res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=30');

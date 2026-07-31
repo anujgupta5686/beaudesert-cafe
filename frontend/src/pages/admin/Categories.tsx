@@ -31,21 +31,32 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  ArrowDown,
+  ArrowUp,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react"
 import { toast } from "sonner"
 import type { Category } from "@/types"
 
 const Categories = () => {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Category | null>(null)
   const [form, setForm] = useState({ name: "", description: "", sortOrder: "0" })
   const [moving, setMoving] = useState<string | null>(null)
 
-  const fetchCategories = async () => {
+  const fetchCategories = async (silent = false) => {
     try {
+      if (silent) setRefreshing(true)
+      else setLoading(true)
       const res = await axios.get("/categories?all=true")
       const list = (res.data.data || []) as Category[]
       list.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
@@ -54,6 +65,7 @@ const Categories = () => {
       toast.error("Failed to load categories")
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -163,10 +175,25 @@ const Categories = () => {
             filters. Lower numbers show first. Use the arrows or edit the number.
           </p>
         </div>
-        <Button className="cursor-pointer" onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Category
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="cursor-pointer"
+            disabled={loading || refreshing}
+            onClick={() => fetchCategories(true)}
+          >
+            {refreshing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+          <Button className="cursor-pointer" onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Category
+          </Button>
+        </div>
       </div>
 
       <Card className="overflow-hidden border shadow-sm">

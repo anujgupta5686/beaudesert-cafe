@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { fetchMenu } from "@/store/slices/menuSlice"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,10 +10,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Package, ShoppingBag, Users, TrendingUp, Star } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  Package,
+  ShoppingBag,
+  Users,
+  TrendingUp,
+  Star,
+  Loader2,
+  RefreshCw,
+} from "lucide-react"
 import axios from "@/api/axios"
 import { formatPrice } from "@/lib/formatPrice"
 import type { Order } from "@/types"
+import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 type TabType = "products" | "orders" | "customers" | "feedback"
 
@@ -48,70 +59,59 @@ const AdminDashboard = () => {
   const [avgRating, setAvgRating] = useState(0)
   const [feedbackCount, setFeedbackCount] = useState(0)
   const [recentFeedback, setRecentFeedback] = useState<FeedbackRow[]>([])
+  const [topProducts, setTopProducts] = useState<ProductStats[]>([])
+  const [customers, setCustomers] = useState<CustomerStats[]>([])
   const [activeTab, setActiveTab] = useState<TabType>("products")
   const [loadingData, setLoadingData] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const loadDashboard = useCallback(async (silent = false) => {
+    try {
+      if (silent) setRefreshing(true)
+      else setLoadingData(true)
+
+      const [statsRes, feedbackSettled] = await Promise.all([
+        axios.get("/orders/dashboard-stats"),
+        axios.get("/feedback/analytics").catch(() => null),
+      ])
+
+      const stats = statsRes.data.data || {}
+      setOrderTotal(Number(stats.orderTotal) || 0)
+      setCustomerCount(Number(stats.customerCount) || 0)
+      setTopProducts(
+        Array.isArray(stats.topProducts) ? stats.topProducts : []
+      )
+      setCustomers(
+        Array.isArray(stats.topCustomers) ? stats.topCustomers : []
+      )
+      setOrders(Array.isArray(stats.recentOrders) ? stats.recentOrders : [])
+
+      if (feedbackSettled?.data?.data) {
+        setAvgRating(feedbackSettled.data.data.averageRating || 0)
+        setFeedbackCount(feedbackSettled.data.data.totalFeedback || 0)
+        setRecentFeedback(feedbackSettled.data.data.recent || [])
+      } else {
+        setAvgRating(0)
+        setFeedbackCount(0)
+        setRecentFeedback([])
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard:", error)
+      toast.error("Failed to load dashboard data")
+    } finally {
+      setLoadingData(false)
+      setRefreshing(false)
+    }
+  }, [])
 
   useEffect(() => {
     dispatch(fetchMenu({ includeUnavailable: true }))
-    fetchOrdersAndCustomers()
-  }, [dispatch])
+    loadDashboard()
+  }, [dispatch, loadDashboard])
 
-  const fetchOrdersAndCustomers = async () => {
-    try {
-      setLoadingData(true)
-      const ordersResponse = await axios.get("/orders", {
-        params: { limit: 50, sortBy: "createdAt", sortOrder: "desc" },
-      })
-      const orderList = Array.isArray(ordersResponse.data.data)
-        ? ordersResponse.data.data
-        : []
-      setOrders(orderList)
-      setOrderTotal(
-        Number(ordersResponse.data.meta?.total ?? orderList.length) || 0
-      )
-
-      const customerResponse = await axios.get("/orders/customers/count")
-      setCustomerCount(customerResponse.data.data.totalCustomers)
-
-      try {
-        const feedbackRes = await axios.get("/feedback/analytics")
-        setAvgRating(feedbackRes.data.data?.averageRating || 0)
-        setFeedbackCount(feedbackRes.data.data?.totalFeedback || 0)
-        setRecentFeedback(feedbackRes.data.data?.recent || [])
-      } catch {
-        // analytics optional if no feedback yet
-      }
-
-      setLoadingData(false)
-    } catch (error) {
-      console.error("Error fetching data:", error)
-      setLoadingData(false)
-    }
-  }
-
-  const getTopProducts = (): ProductStats[] => {
-    const productCount: { [key: string]: ProductStats } = {}
-
-    orders.forEach((order) => {
-      order.items.forEach((item) => {
-        const quantity = item.quantity || 1
-        const key = item.menuItemId || item.name
-        if (productCount[key]) {
-          productCount[key].count += quantity
-          productCount[key].revenue += item.price * quantity
-        } else {
-          productCount[key] = {
-            name: item.name,
-            count: quantity,
-            revenue: item.price * quantity,
-          }
-        }
-      })
-    })
-
-    return Object.values(productCount)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
+  const handleRefresh = () => {
+    dispatch(fetchMenu({ includeUnavailable: true }))
+    loadDashboard(true)
   }
 
   const stats = [
@@ -141,7 +141,7 @@ const AdminDashboard = () => {
     },
     {
       title: "Avg Feedback",
-      value: feedbackCount ? `${avgRating}★ (${feedbackCount})` : "—",
+      value: feedbackCount ? avgRating : "—",
       icon: Star,
       color: "text-amber-500",
       bgColor: "bg-amber-500/10",
@@ -149,40 +149,34 @@ const AdminDashboard = () => {
     },
   ]
 
-  const topProducts = getTopProducts()
-
-  const getUniqueCustomers = (): CustomerStats[] => {
-    const uniqueCustomers: { [key: string]: CustomerStats } = {}
-
-    orders.forEach((order) => {
-      const key = `${order.customerName}-${order.mobile}`
-      if (!uniqueCustomers[key]) {
-        uniqueCustomers[key] = {
-          name: order.customerName,
-          mobile: order.mobile,
-          totalOrders: 0,
-          totalSpent: 0,
-        }
-      }
-      uniqueCustomers[key].totalOrders += 1
-      uniqueCustomers[key].totalSpent += order.totalAmount
-    })
-
-    return Object.values(uniqueCustomers)
-  }
-
-  const customers = getUniqueCustomers()
-
   const orderLabel = (order: Order) =>
     order.orderNumber || `#${order._id.slice(-6).toUpperCase()}`
+
+  const busy = loading || loadingData
 
   const renderTable = () => {
     if (activeTab === "products") {
       return (
         <>
-          <div className="mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold">Top 10 Products</h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold">Top 10 Products</h3>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
+              disabled={refreshing || busy}
+              onClick={handleRefresh}
+            >
+              {refreshing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
           </div>
           <Table>
             <TableHeader>
@@ -207,12 +201,8 @@ const AdminDashboard = () => {
                 topProducts.map((product, index) => (
                   <TableRow key={`${product.name}-${index}`}>
                     <TableCell>{index + 1}</TableCell>
-                    <TableCell className="font-medium">
-                      {product.name}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {product.count}
-                    </TableCell>
+                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="text-right">{product.count}</TableCell>
                     <TableCell className="text-right font-semibold text-primary">
                       {formatPrice(product.revenue)}
                     </TableCell>
@@ -228,7 +218,23 @@ const AdminDashboard = () => {
     if (activeTab === "orders") {
       return (
         <>
-          <h3 className="mb-4 font-semibold">Recent Orders</h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="font-semibold">Recent Orders</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
+              disabled={refreshing || busy}
+              onClick={handleRefresh}
+            >
+              {refreshing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -249,7 +255,7 @@ const AdminDashboard = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                orders.slice(0, 10).map((order) => (
+                orders.map((order) => (
                   <TableRow key={order._id}>
                     <TableCell className="font-mono text-xs font-medium">
                       {orderLabel(order)}
@@ -273,7 +279,23 @@ const AdminDashboard = () => {
     if (activeTab === "customers") {
       return (
         <>
-          <h3 className="mb-4 font-semibold">Customer List</h3>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="font-semibold">Customer List</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
+              disabled={refreshing || busy}
+              onClick={handleRefresh}
+            >
+              {refreshing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -295,12 +317,10 @@ const AdminDashboard = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                customers.slice(0, 10).map((customer, index) => (
+                customers.map((customer, index) => (
                   <TableRow key={`${customer.mobile}-${index}`}>
                     <TableCell>{index + 1}</TableCell>
-                    <TableCell className="font-medium">
-                      {customer.name}
-                    </TableCell>
+                    <TableCell className="font-medium">{customer.name}</TableCell>
                     <TableCell>{customer.mobile}</TableCell>
                     <TableCell className="text-right">
                       {customer.totalOrders}
@@ -317,105 +337,104 @@ const AdminDashboard = () => {
       )
     }
 
-    if (activeTab === "feedback") {
-      return (
-        <>
-          <h3 className="mb-4 font-semibold">Recent Feedback</h3>
-          <Table>
-            <TableHeader>
+    return (
+      <>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="font-semibold">Recent Feedback</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            className="cursor-pointer"
+            disabled={refreshing || busy}
+            onClick={handleRefresh}
+          >
+            {refreshing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
+          </Button>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Customer</TableHead>
+              <TableHead>Rating</TableHead>
+              <TableHead>Comment</TableHead>
+              <TableHead className="text-right">Date</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {recentFeedback.length === 0 ? (
               <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Rating</TableHead>
-                <TableHead>Comment</TableHead>
-                <TableHead className="text-right">Date</TableHead>
+                <TableCell
+                  colSpan={4}
+                  className="text-center text-muted-foreground"
+                >
+                  No feedback submitted yet.
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentFeedback.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-muted-foreground"
-                  >
-                    No feedback submitted yet.
+            ) : (
+              recentFeedback.map((fb) => (
+                <TableRow key={fb._id}>
+                  <TableCell className="font-medium">
+                    {fb.customerName || "—"}
+                  </TableCell>
+                  <TableCell>
+                    {fb.overallRating != null ? `${fb.overallRating}★` : "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[280px] truncate text-muted-foreground">
+                    {fb.overallComment || "—"}
+                  </TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">
+                    {fb.submittedAt
+                      ? new Date(fb.submittedAt).toLocaleDateString()
+                      : "—"}
                   </TableCell>
                 </TableRow>
-              ) : (
-                recentFeedback.map((fb) => (
-                  <TableRow key={fb._id}>
-                    <TableCell className="font-medium">
-                      {fb.customerName || "—"}
-                    </TableCell>
-                    <TableCell>
-                      {fb.overallRating != null
-                        ? `${fb.overallRating}★`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="max-w-[280px] truncate text-muted-foreground">
-                      {fb.overallComment || "—"}
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
-                      {fb.submittedAt
-                        ? new Date(fb.submittedAt).toLocaleDateString()
-                        : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </>
-      )
-    }
-
-    return null
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </>
+    )
   }
-
-  const tableTitle =
-    activeTab === "products"
-      ? "Top 10 Products"
-      : activeTab === "orders"
-        ? "Recent Orders"
-        : activeTab === "customers"
-          ? "Customer List"
-          : "Recent Feedback"
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-bold">Dashboard</h1>
+      <h1 className="mb-6 text-3xl font-bold tracking-tight">Dashboard</h1>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <Card
             key={stat.title}
-            className={`cursor-pointer border-0 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${
-              activeTab === stat.tab ? "ring-2 ring-primary" : ""
-            }`}
+            className={cn(
+              "cursor-pointer border shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md",
+              activeTab === stat.tab && "ring-2 ring-primary/70"
+            )}
             onClick={() => setActiveTab(stat.tab)}
           >
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {stat.title}
               </CardTitle>
-              <div className={`rounded-full ${stat.bgColor} p-2`}>
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              <div className={cn("rounded-full p-2", stat.bgColor)}>
+                <stat.icon className={cn("h-4 w-4", stat.color)} />
               </div>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {loading || loadingData ? "..." : stat.value}
+                {busy ? "..." : stat.value}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Card className="border-0 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">{tableTitle}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading || loadingData ? (
+      <Card className="border shadow-sm">
+        <CardContent className="pt-5">
+          {busy && !refreshing ? (
             <div className="py-8 text-center text-muted-foreground">
               Loading...
             </div>

@@ -70,6 +70,9 @@ export type Order = {
   customerName: string
   email?: string
   mobile: string
+  countryCode?: string
+  countryIso?: string
+  fullMobile?: string
   address: string
   specialInstructions: string
   items: OrderItem[]
@@ -108,6 +111,7 @@ export type Admin = {
   id: string
   email: string
   name: string
+  avatar?: string
 }
 
 export type ApiResponse<T = unknown> = {

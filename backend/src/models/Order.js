@@ -22,6 +22,25 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    /** Dial code e.g. +91 */
+    countryCode: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    /** ISO 3166-1 alpha-2 e.g. IN */
+    countryIso: {
+      type: String,
+      default: '',
+      uppercase: true,
+      trim: true,
+    },
+    /** E.164 full number e.g. +919876543210 */
+    fullMobile: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     address: {
       type: String,
       required: true,

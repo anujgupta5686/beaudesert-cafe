@@ -7,6 +7,15 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useCart } from "@/hooks/useCart"
 import { formatPrice } from "@/lib/formatPrice"
+import {
+  PhoneInput,
+  DEFAULT_PHONE_COUNTRY,
+} from "@/components/shared/PhoneInput"
+import {
+  buildE164,
+  isValidNationalMobile,
+  type PhoneCountry,
+} from "@/lib/phone"
 import { ArrowLeft } from "lucide-react"
 import axios from "@/api/axios"
 import { toast } from "sonner"
@@ -16,10 +25,14 @@ const Checkout = () => {
   const navigate = useNavigate()
   const { items, totalPrice, clearCart } = useCart()
   const [loading, setLoading] = useState(false)
+  const [phoneCountry, setPhoneCountry] = useState<PhoneCountry>(
+    DEFAULT_PHONE_COUNTRY
+  )
+  const [nationalMobile, setNationalMobile] = useState("")
+  const [phoneError, setPhoneError] = useState("")
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
-    mobile: "",
     address: "",
     specialInstructions: "",
   })
@@ -36,11 +49,26 @@ const Checkout = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!isValidNationalMobile(phoneCountry, nationalMobile)) {
+      setPhoneError(
+        `Enter a valid ${phoneCountry.name} mobile number (${phoneCountry.nationalLength} digits)`
+      )
+      toast.error(
+        `Mobile must be exactly ${phoneCountry.nationalLength} digits for ${phoneCountry.name}`
+      )
+      return
+    }
+    setPhoneError("")
     setLoading(true)
 
     try {
       const orderData = {
         ...formData,
+        mobile: nationalMobile,
+        countryCode: phoneCountry.dialCode,
+        countryIso: phoneCountry.iso,
+        fullMobile: buildE164(phoneCountry, nationalMobile),
         items: items.map((item) => ({
           menuItemId: item._id,
           name: item.name,
@@ -141,14 +169,19 @@ const Checkout = () => {
                     <Label htmlFor="mobile">
                       Mobile <span className="text-destructive">*</span>
                     </Label>
-                    <Input
+                    <PhoneInput
                       id="mobile"
-                      name="mobile"
-                      type="tel"
-                      required
-                      placeholder="9876543210"
-                      value={formData.mobile}
-                      onChange={handleChange}
+                      country={phoneCountry}
+                      nationalNumber={nationalMobile}
+                      onCountryChange={(c) => {
+                        setPhoneCountry(c)
+                        setPhoneError("")
+                      }}
+                      onNationalChange={(n) => {
+                        setNationalMobile(n)
+                        setPhoneError("")
+                      }}
+                      error={phoneError}
                     />
                   </div>
                 </div>
