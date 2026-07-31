@@ -113,9 +113,22 @@ const Checkout = () => {
 
       if (response.data.success) {
         clearCart()
-        toast.success(
-          "Order placed successfully! Check your email for confirmation."
-        )
+        if (response.data.userEmailSent) {
+          toast.success(
+            "Order placed successfully! Check your email for confirmation."
+          )
+        } else {
+          toast.success("Order placed successfully!")
+          if (response.data.emailError) {
+            toast.warning(
+              `Confirmation email could not be sent: ${response.data.emailError}`
+            )
+          } else {
+            toast.message(
+              "Confirmation email may be delayed — check spam if it does not arrive."
+            )
+          }
+        }
         navigate("/")
       }
     } catch (error: unknown) {

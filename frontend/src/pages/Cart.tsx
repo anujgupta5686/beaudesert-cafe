@@ -8,13 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { SearchableSelect } from "@/components/shared/SearchableSelect"
 import { useCart } from "@/hooks/useCart"
 import { formatPrice } from "@/lib/formatPrice"
 import { resolveMediaUrl } from "@/lib/mediaUrl"
@@ -92,23 +86,19 @@ const Cart = () => {
                           <span className="text-xs text-muted-foreground">
                             Size
                           </span>
-                          <Select
+                          <SearchableSelect
                             value={item.size || undefined}
-                            onValueChange={(v) => {
-                              if (v) changeItemSize(item.cartKey, String(v))
-                            }}
-                          >
-                            <SelectTrigger className="h-9 w-full max-w-[180px] cursor-pointer">
-                              <SelectValue placeholder="Select size" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {item.variants.map((v) => (
-                                <SelectItem key={v.label} value={v.label}>
-                                  {v.label} — {formatPrice(v.price)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onValueChange={(v) =>
+                              changeItemSize(item.cartKey, v)
+                            }
+                            placeholder="Select size"
+                            searchPlaceholder="Search size"
+                            className="w-full max-w-[180px] [&_button]:h-9"
+                            options={item.variants.map((v) => ({
+                              value: v.label,
+                              label: `${v.label} — ${formatPrice(v.price)}`,
+                            }))}
+                          />
                         </div>
                       ) : item.size ? (
                         <p className="text-xs text-muted-foreground">

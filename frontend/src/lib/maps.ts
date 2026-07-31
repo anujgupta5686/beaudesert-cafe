@@ -3,13 +3,30 @@ export function googleMapsUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps?q=${lat},${lng}`
 }
 
-/** Small static map preview (OpenStreetMap — no API key) */
-export function staticMapPreviewUrl(
-  lat: number,
-  lng: number,
-  size = "120x120"
-): string {
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=15&size=${size}&markers=${lat},${lng},red-pushpin`
+/** Google Maps search by address text */
+export function googleMapsAddressUrl(address: string): string {
+  return `https://www.google.com/maps?q=${encodeURIComponent(address)}`
+}
+
+/**
+ * OpenStreetMap embed URL (no API key).
+ * Works in iframes — staticmap.openstreetmap.de is unreliable/down.
+ */
+export function osmEmbedUrl(lat: number, lng: number, delta = 0.008): string {
+  const left = lng - delta
+  const right = lng + delta
+  const top = lat + delta
+  const bottom = lat - delta
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${lat}%2C${lng}`
+}
+
+/** Google Maps embed (fallback / address-based) */
+export function googleEmbedUrl(lat: number, lng: number): string {
+  return `https://maps.google.com/maps?q=${lat},${lng}&z=15&output=embed`
+}
+
+export function googleAddressEmbedUrl(address: string): string {
+  return `https://maps.google.com/maps?q=${encodeURIComponent(address)}&z=15&output=embed`
 }
 
 export function hasValidCoords(

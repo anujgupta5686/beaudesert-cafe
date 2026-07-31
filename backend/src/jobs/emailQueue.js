@@ -6,26 +6,41 @@ const logger = require('../utils/logger');
 /**
  * Background email queue.
  * - If REDIS_URL is set and bullmq is installed: uses BullMQ
- * - Otherwise: setImmediate fallback (non-blocking, no Redis required on Render)
+ * - Otherwise: direct SMTP (awaited for order mails via sendEmailNow)
  */
 
 let transporter = null;
 let queue = null;
 let queueReady = false;
+let smtpReady = false;
 
 const getTransporter = () => {
   if (!transporter) {
+    if (!emailConfig.isConfigured) {
+      throw new Error(
+        'Email is not configured. Set MAIL_HOST, MAIL_USER, MAIL_PASS on the server.'
+      );
+    }
     transporter = nodemailer.createTransport({
       host: emailConfig.host,
       port: emailConfig.port,
       secure: emailConfig.secure,
+      requireTLS: emailConfig.requireTLS,
       auth: emailConfig.auth,
+      connectionTimeout: 20_000,
+      greetingTimeout: 20_000,
+      socketTimeout: 30_000,
     });
   }
   return transporter;
 };
 
 const deliverEmail = async ({ to, subject, html }) => {
+  if (!emailConfig.isConfigured) {
+    throw new Error(
+      'Email is not configured. Set MAIL_HOST, MAIL_USER, MAIL_PASS on Render.'
+    );
+  }
   logger.info('Sending email', { to, subject });
   const info = await getTransporter().sendMail({
     from: emailConfig.from,
@@ -37,14 +52,43 @@ const deliverEmail = async ({ to, subject, html }) => {
   return true;
 };
 
+/** Call once at boot — logs clear SMTP status for Render debugging */
+const verifySmtp = async () => {
+  if (!emailConfig.isConfigured) {
+    logger.error(
+      'SMTP NOT CONFIGURED — order emails will fail. Set MAIL_HOST, MAIL_USER, MAIL_PASS, ADMIN_EMAIL'
+    );
+    smtpReady = false;
+    return false;
+  }
+  try {
+    await getTransporter().verify();
+    smtpReady = true;
+    logger.info('SMTP verified OK', {
+      host: emailConfig.host,
+      user: emailConfig.auth.user,
+    });
+    return true;
+  } catch (err) {
+    smtpReady = false;
+    logger.error('SMTP verify FAILED — check MAIL_USER / MAIL_PASS (Gmail App Password)', {
+      error: err.message,
+      host: emailConfig.host,
+      user: emailConfig.auth.user,
+    });
+    return false;
+  }
+};
+
 const initQueue = async () => {
+  await verifySmtp();
+
   if (!redisConfig.enabled) {
-    logger.warn('REDIS_URL not set — using async fallback for emails');
+    logger.warn('REDIS_URL not set — emails send directly via SMTP');
     return;
   }
 
   try {
-    // Optional dependency — only load when Redis is configured
     const { Queue, Worker } = require('bullmq');
     const IORedis = require('ioredis');
     const connection = new IORedis(redisConfig.url, {
@@ -64,7 +108,7 @@ const initQueue = async () => {
     logger.info('BullMQ email queue ready');
   } catch (error) {
     logger.warn(
-      'BullMQ unavailable — falling back to setImmediate. Install bullmq + ioredis and set REDIS_URL to enable.',
+      'BullMQ unavailable — using direct SMTP.',
       { error: error.message }
     );
     queue = null;
@@ -72,48 +116,31 @@ const initQueue = async () => {
   }
 };
 
-/**
- * Enqueue email without blocking the API response.
- */
 const assertRecipient = (to, subject) => {
   if (!to || typeof to !== 'string' || !to.includes('@')) {
     logger.error('Email skipped — invalid recipient', { to, subject });
     throw new Error(`Invalid email recipient: ${to || '(empty)'}`);
   }
-  return to.trim();
+  return to.trim().toLowerCase();
 };
 
-/** Non-blocking enqueue (order placed, admin alerts, etc.) */
+/** Prefer awaited send for reliability (Render can drop fire-and-forget work) */
 const enqueueEmail = async (to, subject, html) => {
-  const recipient = assertRecipient(to, subject);
-  const payload = { to: recipient, subject, html };
-
-  if (queueReady && queue) {
-    await queue.add('send', payload, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: true,
-    });
-    return true;
-  }
-
-  setImmediate(() => {
-    deliverEmail(payload).catch((err) =>
-      logger.error('Async email failed', { error: err.message, to: recipient })
-    );
-  });
-  return true;
+  return sendEmailNow(to, subject, html);
 };
 
-/** Await SMTP delivery — use for order-completed so admin knows if mail failed */
+/** Await SMTP delivery so API/logs show real success/failure */
 const sendEmailNow = async (to, subject, html) => {
   const recipient = assertRecipient(to, subject);
+  // Always send directly — reliable on Render (no dependency on queue worker)
   return deliverEmail({ to: recipient, subject, html });
 };
 
 module.exports = {
   initQueue,
+  verifySmtp,
   enqueueEmail,
   sendEmailNow,
   deliverEmail,
+  isSmtpReady: () => smtpReady,
 };

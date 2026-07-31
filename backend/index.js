@@ -14,7 +14,6 @@ const cloudinaryConnection = require('./src/config/cloudinary');
 const { assertStorageConfig } = require('./src/config/storage');
 const { initQueue } = require('./src/jobs/emailQueue');
 const { apiLimiter } = require('./src/middleware/rateLimiter');
-const { authLimiter } = require('./src/middleware/rateLimiter');
 const errorHandler = require('./src/middleware/errorHandler');
 const logger = require('./src/utils/logger');
 
@@ -112,12 +111,16 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
+  const emailConfig = require('./src/config/email');
+  const { isSmtpReady } = require('./src/jobs/emailQueue');
   res.status(200).json({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     appEnv: env.appEnv,
     storageProvider: env.storageProvider,
+    emailConfigured: emailConfig.isConfigured,
+    smtpReady: isSmtpReady(),
   });
 });
 

@@ -12,13 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { SearchableSelect } from "@/components/shared/SearchableSelect"
 import {
   ArrowLeft,
   Loader2,
@@ -26,7 +20,6 @@ import {
   X,
   Image as ImageIcon,
 } from "lucide-react"
-import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import axios from "axios"
 import type { ProductVariant } from "@/types"
@@ -272,37 +265,18 @@ const AddProduct = () => {
 
             <div className="space-y-2">
               <Label htmlFor="category">Category</Label>
-              <Select
+              <SearchableSelect
+                id="category"
                 value={categoryId || undefined}
-                onValueChange={(v) => setCategoryId(v ? String(v) : "")}
-              >
-                <SelectTrigger
-                  id="category"
-                  className="h-11 w-full cursor-pointer"
-                >
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <AnimatePresence>
-                  <SelectContent className="origin-top">
-                    <motion.div
-                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
-                      transition={{ duration: 0.16, ease: "easeOut" }}
-                    >
-                      {categories.map((cat) => (
-                        <SelectItem
-                          key={cat._id}
-                          value={cat._id}
-                          className="cursor-pointer"
-                        >
-                          {cat.name}
-                        </SelectItem>
-                      ))}
-                    </motion.div>
-                  </SelectContent>
-                </AnimatePresence>
-              </Select>
+                onValueChange={setCategoryId}
+                placeholder="Select category"
+                searchPlaceholder="Search to Select"
+                emptyText="No categories match"
+                options={categories.map((cat) => ({
+                  value: cat._id,
+                  label: cat.name,
+                }))}
+              />
             </div>
 
             <div className="space-y-2">

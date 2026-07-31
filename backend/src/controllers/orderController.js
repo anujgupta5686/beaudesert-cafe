@@ -132,12 +132,40 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    emailService.sendOrderConfirmationToUser(order);
-    emailService.sendOrderNotificationToAdmin(order);
+    let userEmailSent = false;
+    let adminEmailSent = false;
+    let emailError = null;
+
+    try {
+      await emailService.sendOrderConfirmationToUser(order);
+      userEmailSent = true;
+    } catch (err) {
+      emailError = err.message;
+      logger.error('Order confirmation email to user failed', {
+        orderId: order._id,
+        email: order.email,
+        error: err.message,
+      });
+    }
+
+    try {
+      await emailService.sendOrderNotificationToAdmin(order);
+      adminEmailSent = true;
+    } catch (err) {
+      emailError = emailError || err.message;
+      logger.error('Order notification email to admin failed', {
+        orderId: order._id,
+        error: err.message,
+      });
+    }
+
     notificationService.createOrderNotification(order).catch(() => {});
 
     res.status(201).json({
       success: true,
+      userEmailSent,
+      adminEmailSent,
+      emailError,
       data: order,
       message: 'Order placed successfully!',
     });
