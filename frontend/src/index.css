@@ -140,22 +140,42 @@
   height: 0;
 }
 
-/* Thin theme-aware scrollbar (light + dark) */
+/* Thin theme-aware scrollbar (light + dark) — primary-tinted thumb */
 .scrollbar-thin-theme {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: color-mix(in oklab, var(--primary) 45%, transparent) transparent;
 }
 .scrollbar-thin-theme::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
 }
 .scrollbar-thin-theme::-webkit-scrollbar-track {
   background: transparent;
 }
 .scrollbar-thin-theme::-webkit-scrollbar-thumb {
-  background-color: var(--border);
+  background-color: color-mix(in oklab, var(--primary) 40%, var(--border));
   border-radius: 9999px;
 }
 .scrollbar-thin-theme::-webkit-scrollbar-thumb:hover {
-  background-color: var(--muted-foreground);
+  background-color: color-mix(in oklab, var(--primary) 70%, transparent);
+}
+
+/* Apply thin themed scrollbars to document by default */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--primary) 45%, transparent) transparent;
+}
+html::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+html::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+  border-radius: 9999px;
+}
+html::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--primary) 70%, transparent);
 }

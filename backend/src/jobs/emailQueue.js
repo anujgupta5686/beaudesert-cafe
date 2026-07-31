@@ -75,8 +75,18 @@ const initQueue = async () => {
 /**
  * Enqueue email without blocking the API response.
  */
+const assertRecipient = (to, subject) => {
+  if (!to || typeof to !== 'string' || !to.includes('@')) {
+    logger.error('Email skipped — invalid recipient', { to, subject });
+    throw new Error(`Invalid email recipient: ${to || '(empty)'}`);
+  }
+  return to.trim();
+};
+
+/** Non-blocking enqueue (order placed, admin alerts, etc.) */
 const enqueueEmail = async (to, subject, html) => {
-  const payload = { to, subject, html };
+  const recipient = assertRecipient(to, subject);
+  const payload = { to: recipient, subject, html };
 
   if (queueReady && queue) {
     await queue.add('send', payload, {
@@ -87,17 +97,23 @@ const enqueueEmail = async (to, subject, html) => {
     return true;
   }
 
-  // Non-blocking fallback
   setImmediate(() => {
     deliverEmail(payload).catch((err) =>
-      logger.error('Async email failed', { error: err.message, to })
+      logger.error('Async email failed', { error: err.message, to: recipient })
     );
   });
   return true;
 };
 
+/** Await SMTP delivery — use for order-completed so admin knows if mail failed */
+const sendEmailNow = async (to, subject, html) => {
+  const recipient = assertRecipient(to, subject);
+  return deliverEmail({ to: recipient, subject, html });
+};
+
 module.exports = {
   initQueue,
   enqueueEmail,
+  sendEmailNow,
   deliverEmail,
 };

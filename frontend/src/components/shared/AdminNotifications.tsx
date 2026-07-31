@@ -5,6 +5,7 @@ import axios from "@/api/axios"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Bell, CheckCheck, ShoppingBag, Mail } from "lucide-react"
+import { toast } from "sonner"
 
 type AdminNotification = {
   _id: string
@@ -17,29 +18,45 @@ type AdminNotification = {
   createdAt: string
 }
 
+const POLL_MS = 45_000
+
 export function AdminNotifications() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<AdminNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
+  const [markingAll, setMarkingAll] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  const pausedUntilRef = useRef(0)
 
   const fetchNotifications = useCallback(async () => {
+    if (Date.now() < pausedUntilRef.current) return
+    if (typeof document !== "undefined" && document.hidden) return
     try {
       const res = await axios.get("/admin/notifications", {
         params: { limit: 30 },
       })
       setItems(res.data.data?.items || [])
       setUnreadCount(res.data.data?.unreadCount || 0)
-    } catch {
-      // silent — panel stays usable
+    } catch (error: unknown) {
+      // Back off hard on rate-limit so we don't spam 429s
+      if (axios.isAxiosError(error) && error.response?.status === 429) {
+        pausedUntilRef.current = Date.now() + 60_000
+      }
     }
   }, [])
 
   useEffect(() => {
     fetchNotifications()
-    const id = window.setInterval(fetchNotifications, 12000)
-    return () => window.clearInterval(id)
+    const id = window.setInterval(fetchNotifications, POLL_MS)
+    const onVisible = () => {
+      if (!document.hidden) fetchNotifications()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
   }, [fetchNotifications])
 
   useEffect(() => {
@@ -59,7 +76,8 @@ export function AdminNotifications() {
   const markReadAndGo = async (n: AdminNotification) => {
     try {
       if (!n.isRead) {
-        await axios.patch(`/admin/notifications/${n._id}/read`)
+        // PUT avoids some CORS preflight Method issues with PATCH
+        await axios.put(`/admin/notifications/${n._id}/read`)
         setItems((prev) =>
           prev.map((x) => (x._id === n._id ? { ...x, isRead: true } : x))
         )
@@ -74,11 +92,19 @@ export function AdminNotifications() {
 
   const markAll = async () => {
     try {
-      await axios.patch("/admin/notifications/read-all")
+      setMarkingAll(true)
+      await axios.put("/admin/notifications/read-all")
       setItems((prev) => prev.map((x) => ({ ...x, isRead: true })))
       setUnreadCount(0)
-    } catch {
-      /* ignore */
+      toast.success("All notifications marked as read")
+    } catch (error: unknown) {
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : "Could not mark notifications as read"
+      toast.error(message)
+    } finally {
+      setMarkingAll(false)
     }
   }
 
@@ -119,20 +145,19 @@ export function AdminNotifications() {
               {unreadCount > 0 && (
                 <button
                   type="button"
-                  className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  disabled={markingAll}
+                  className="flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
                   onClick={markAll}
                 >
                   <CheckCheck className="h-3.5 w-3.5" />
-                  Mark all read
+                  {markingAll ? "Marking…" : "Mark all read"}
                 </button>
               )}
             </div>
             <div className="scrollbar-thin-theme max-h-72 overflow-y-auto">
               {visible.length === 0 ? (
                 <p className="px-3 py-8 text-center text-sm text-muted-foreground">
-                  {unreadCount === 0
-                    ? "You're all caught up"
-                    : "No notifications yet"}
+                  You're all caught up
                 </p>
               ) : (
                 visible.map((n) => (

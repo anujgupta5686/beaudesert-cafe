@@ -64,6 +64,11 @@ export type OrderItem = {
   productType?: "normal" | "combo"
 }
 
+export type OrderLocation = {
+  lat?: number | null
+  lng?: number | null
+}
+
 export type Order = {
   _id: string
   orderNumber?: string
@@ -71,6 +76,7 @@ export type Order = {
   email?: string
   mobile: string
   address: string
+  location?: OrderLocation | null
   specialInstructions: string
   items: OrderItem[]
   totalAmount: number

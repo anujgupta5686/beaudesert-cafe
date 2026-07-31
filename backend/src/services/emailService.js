@@ -1,4 +1,4 @@
-const { enqueueEmail } = require('../jobs/emailQueue');
+const { enqueueEmail, sendEmailNow } = require('../jobs/emailQueue');
 const emailConfig = require('../config/email');
 const env = require('../config/environment');
 const { formatMoney } = require('../utils/helpers');
@@ -77,6 +77,17 @@ const emailService = {
   },
 
   async sendOrderNotificationToAdmin(order) {
+    const lat = order.location?.lat;
+    const lng = order.location?.lng;
+    const hasPin =
+      typeof lat === 'number' &&
+      typeof lng === 'number' &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng);
+    const mapsUrl = hasPin
+      ? `https://www.google.com/maps?q=${lat},${lng}`
+      : null;
+
     const html = chrome.wrap({
       title: 'New Order Received',
       preheader: `${order.customerName} — ${formatMoney(order.totalAmount)}`,
@@ -87,6 +98,11 @@ const emailService = {
           <p style="margin:6px 0 0;"><strong>Email:</strong> ${order.email}</p>
           <p style="margin:6px 0 0;"><strong>Mobile:</strong> ${order.mobile}</p>
           <p style="margin:6px 0 0;"><strong>Address:</strong> ${order.address}</p>
+          ${
+            mapsUrl
+              ? `<p style="margin:6px 0 0;"><strong>Location:</strong> <a href="${mapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a></p>`
+              : ''
+          }
         `, '#f4f4f5')}
         ${itemRows(order.items)}
         <p style="margin:16px 0 0;font-size:18px;font-weight:bold;color:#b45309;">Total: ${formatMoney(order.totalAmount)}</p>
@@ -115,7 +131,7 @@ const emailService = {
         </div>
       `,
     });
-    return enqueueEmail(
+    return sendEmailNow(
       order.email,
       `Order Completed ${orderIdLabel(order)} — Share Feedback`,
       html

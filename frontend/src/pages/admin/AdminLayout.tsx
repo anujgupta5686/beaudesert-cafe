@@ -65,7 +65,7 @@ const AdminLayout = () => {
   }
 
   const NavLinks = () => (
-    <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+    <nav className="scrollbar-thin-theme flex-1 space-y-1 overflow-y-auto p-3">
       {navItems.map((item) => {
         const active = isActive(item.to)
         return (
@@ -160,7 +160,7 @@ const AdminLayout = () => {
           </Button>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <main className="scrollbar-thin-theme flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           <div className="mx-auto max-w-7xl">
             <Outlet />
           </div>
