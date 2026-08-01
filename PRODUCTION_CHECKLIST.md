@@ -68,22 +68,27 @@ You do **not** need GoDaddy for S3/EC2 creation — only for DNS.
 
 ---
 
-## C. Production architecture (recommended)
+## C. Production architecture (EC2 — no S3)
+
+Keep images on **Cloudinary** (already working). Deploy API + frontend on **one EC2**.
 
 ```
 GoDaddy DNS
     │
-    ├── cafe-domain.com        → Frontend (Nginx on EC2 or S3+CloudFront)
-    └── api.cafe-domain.com    → Backend Express on EC2
+    ├── yourdomain.com         → Nginx → frontend build (EC2)
+    └── api.yourdomain.com     → Nginx → Express API (EC2 :5000)
               │
               ├── MongoDB Atlas (prod URI)
-              ├── S3 bucket (media)
-              └── SMTP (client Gmail App Password  OR  Amazon SES)
+              ├── Cloudinary (images)
+              └── Gmail SMTP App Password (client inbox)
 ```
+
+> **Why leave Render for mail?** Many Render instances cannot reliably reach Gmail SMTP
+> (`smtpReady: false` / verify hangs). EC2 outbound port 587 usually works with a Gmail App Password.
 
 ---
 
-## D. Step-by-step: AWS + EC2 + S3
+## D. Step-by-step: AWS EC2 only (no S3)
 
 ### 1) Create AWS account (client)
 
@@ -93,77 +98,76 @@ GoDaddy DNS
 
 ### 2) Create EC2 instance
 
-1. Region: pick closest (e.g. `ap-southeast-2` for Australia).
-2. AMI: Ubuntu 22.04 LTS.
-3. Instance: `t3.small` (start); enlarge later if needed.
-4. Storage: 20–30 GB gp3.
-5. Security group inbound:
-   - `22` SSH (your IP only)
-   - `80` HTTP (0.0.0.0/0)
-   - `443` HTTPS (0.0.0.0/0)
-6. Allocate **Elastic IP** and attach (so DNS stays stable).
-7. SSH in, install: Node 20, Nginx, Certbot, PM2, git.
+1. Region: closest to client (e.g. `ap-southeast-2` Australia).
+2. AMI: **Ubuntu 22.04 LTS**.
+3. Instance: **t3.small** (ok to start).
+4. Storage: **20–30 GB** gp3.
+5. Key pair: create/download `.pem` (keep safe).
+6. Security group inbound:
+   - `22` SSH → your IP only
+   - `80` HTTP → `0.0.0.0/0`
+   - `443` HTTPS → `0.0.0.0/0`
+7. Launch → **Elastic IP** → Associate to instance (stable public IP for DNS).
 
-### 3) Create S3 bucket for media
+### 3) First SSH + install stack
 
-1. Bucket name: e.g. `beaudesert-cafe-media-prod` (globally unique).
-2. Block public access: turn **off** only if you serve via public object URLs; **or** keep private + CloudFront (better).
-3. Simple public-read approach (faster start):
-   - Bucket policy allow `s3:GetObject` on `arn:aws:s3:::BUCKET/*`
-4. Create IAM user `cafe-s3-uploader` with policy: `s3:PutObject`, `s3:DeleteObject`, `s3:GetObject` on that bucket.
-5. Save `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`.
+```bash
+ssh -i your-key.pem ubuntu@ELASTIC_IP
 
-CORS (bucket → Permissions → CORS):
-
-```json
-[
-  {
-    "AllowedHeaders": ["*"],
-    "AllowedMethods": ["GET", "PUT", "POST", "HEAD"],
-    "AllowedOrigins": ["https://YOUR-DOMAIN.com", "https://www.YOUR-DOMAIN.com"],
-    "ExposeHeaders": ["ETag"]
-  }
-]
+sudo apt update && sudo apt upgrade -y
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs nginx git
+sudo npm i -g pm2
+sudo snap install --classic certbot
 ```
 
 ### 4) Deploy backend on EC2
 
 ```bash
-# on EC2
-git clone <repo>
+mkdir -p ~/apps && cd ~/apps
+git clone https://github.com/anujgupta5686/beaudesert-cafe.git
 cd beaudesert-cafe/backend
 npm ci --omit=dev
-# create /home/ubuntu/apps/beaudesert-cafe/backend/.env  (see section E)
+nano .env   # paste production env from section E
 pm2 start index.js --name cafe-api
 pm2 save
+pm2 startup   # follow the command it prints
 ```
 
-Nginx reverse proxy: `api.yourdomain.com` → `http://127.0.0.1:5000`  
-Certbot: `sudo certbot --nginx -d api.yourdomain.com`
-
-### 5) Deploy frontend
-
-Option A — same EC2 (simple):
+### 5) Deploy frontend on same EC2
 
 ```bash
-cd frontend
-# create .env.production with VITE_API_URL=https://api.yourdomain.com/api
+cd ~/apps/beaudesert-cafe/frontend
+# create .env.production (see section E)
 npm ci
 npm run build
-# serve dist/ with Nginx
+# Nginx will serve frontend/dist
 ```
 
-Option B — S3 + CloudFront for static frontend (more “AWS native”).
+### 6) Nginx + SSL
 
-### 6) GoDaddy DNS
+Create `/etc/nginx/sites-available/cafe`:
+
+- `yourdomain.com` / `www` → `root` = `.../frontend/dist`
+- `api.yourdomain.com` → `proxy_pass http://127.0.0.1:5000`
+
+Then:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/cafe /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com -d api.yourdomain.com
+```
+
+### 7) GoDaddy DNS
 
 | Type | Name | Value |
 |------|------|--------|
 | A | @ | EC2 Elastic IP |
 | CNAME | www | yourdomain.com |
-| A or CNAME | api | EC2 Elastic IP (or subdomain A) |
+| A | api | EC2 Elastic IP |
 
-Wait for DNS propagation, then Certbot HTTPS.
+Wait for DNS, then run Certbot if not done yet.
 
 ---
 
@@ -190,13 +194,11 @@ MAIL_USER=<client gmail>
 MAIL_PASS=<client app password>
 ADMIN_EMAIL=<cafe inbox for new orders>
 
-STORAGE_PROVIDER=s3
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_REGION=ap-southeast-2
-AWS_S3_BUCKET=beaudesert-cafe-media-prod
-# AWS_S3_PUBLIC_URL=https://beaudesert-cafe-media-prod.s3.ap-southeast-2.amazonaws.com
-# AWS_S3_KEY_PREFIX=beaudesert-cafe
+# Keep Cloudinary for images (no S3 required)
+STORAGE_PROVIDER=cloudinary
+CLOUD_NAME=...
+API_KEY=...
+API_SECRET=...
 
 FEEDBACK_EXPIRY_DAYS=30
 ```
@@ -250,18 +252,17 @@ Until SES is verified, use Gmail App Password so orders never go silent.
 
 1. Confirm development `/health` → `smtpReady: true` and test all mail flows.  
 2. Create AWS account + IAM user.  
-3. Create S3 + IAM keys.  
-4. Create EC2 + Elastic IP + security group.  
-5. Create prod Atlas DB user + allow EC2 IP / `0.0.0.0/0` (tighten later).  
-6. Put production `.env` on EC2; start API with PM2.  
-7. Build frontend with prod `VITE_API_URL`.  
-8. Nginx + SSL.  
-9. Point GoDaddy DNS.  
-10. Seed/create admin user on prod DB.  
-11. Update Cafe Settings in admin.  
-12. Place a real test order → check customer + admin inbox.  
+3. Create EC2 + Elastic IP + security group.  
+4. Create prod Atlas DB user + allow EC2 IP (or `0.0.0.0/0` temporarily).  
+5. Put production `.env` on EC2 (Cloudinary + Gmail App Password); start API with PM2.  
+6. Build frontend with prod `VITE_API_URL`.  
+7. Nginx + SSL.  
+8. Point GoDaddy DNS.  
+9. Create admin user on prod DB / login.  
+10. Update Cafe Settings in admin.  
+11. `curl https://api.yourdomain.com/health` → `smtpReady: true`.  
+12. Place test order → confirm customer + admin inbox.  
 13. Mark completed → feedback email.  
-14. Upload a product image → confirm S3 URL in Mongo.  
 
 ---
 
@@ -269,10 +270,10 @@ Until SES is verified, use Gmail App Password so orders never go silent.
 
 | Done | Next |
 |------|------|
-| Client email access | Create Gmail App Password; set on Render then EC2 |
-| MongoDB Atlas | Separate **prod** cluster/DB if possible; whitelist EC2 IP |
-| Domain on GoDaddy | DNS A/CNAME + SSL |
-| — | AWS account, EC2, S3, PM2, Nginx, env files |
+| Client email access | Create Gmail App Password; put on **EC2** `.env` |
+| MongoDB Atlas | Whitelist EC2 IP; use prod URI |
+| Domain on GoDaddy | DNS A/CNAME → Elastic IP + SSL |
+| — | AWS account, EC2, PM2, Nginx (Cloudinary stays — no S3) |
 
 ---
 
