@@ -18,13 +18,25 @@ exports.createMessage = async (req, res) => {
       message: message.trim(),
     });
 
-    emailService.notifyAdminContactMessage(doc).catch(() => {});
+    let emailSent = false;
+    let emailError = null;
+    try {
+      await emailService.notifyAdminContactMessage(doc);
+      emailSent = true;
+    } catch (err) {
+      emailError = err.message || 'Failed to email admin';
+    }
+
     notificationService.createMessageNotification(doc).catch(() => {});
 
     res.status(201).json({
       success: true,
-      message: 'Message sent successfully',
+      message: emailSent
+        ? 'Message sent successfully'
+        : 'Message saved, but admin email failed',
       data: { id: doc._id },
+      emailSent,
+      emailError,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

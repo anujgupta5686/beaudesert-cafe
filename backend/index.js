@@ -111,17 +111,38 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  const emailConfig = require('./src/config/email');
-  const { isSmtpReady } = require('./src/jobs/emailQueue');
+  const { getSmtpStatus } = require('./src/jobs/emailQueue');
+  const smtp = getSmtpStatus();
   res.status(200).json({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     appEnv: env.appEnv,
     storageProvider: env.storageProvider,
-    emailConfigured: emailConfig.isConfigured,
-    smtpReady: isSmtpReady(),
+    emailConfigured: smtp.configured,
+    smtpReady: smtp.ready,
+    smtpHost: smtp.host,
+    smtpUser: smtp.user,
+    smtpError: smtp.lastError,
   });
+});
+
+/** Re-check SMTP without redeploying (ops). Does not send a real email. */
+app.post('/health/smtp-verify', async (req, res) => {
+  try {
+    const { verifySmtp, getSmtpStatus } = require('./src/jobs/emailQueue');
+    const ok = await verifySmtp();
+    const smtp = getSmtpStatus();
+    res.status(ok ? 200 : 503).json({
+      success: ok,
+      message: ok
+        ? 'SMTP verified OK'
+        : smtp.lastError || 'SMTP verify failed',
+      ...smtp,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
 
 app.use(errorHandler);
