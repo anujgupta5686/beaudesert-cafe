@@ -12,6 +12,8 @@ let transporter = null;
 let queue = null;
 let queueReady = false;
 let smtpReady = false;
+/** Last SMTP error message (no secrets) — exposed via /health for ops */
+let lastSmtpError = null;
 
 const buildTransporter = () => {
   if (!emailConfig.isConfigured) {
@@ -81,13 +83,17 @@ const deliverEmail = async ({ to, subject, html }) => {
       const info = await getTransporter().sendMail(payload);
       logger.info('Email sent', { messageId: info.messageId, to, attempt });
       smtpReady = true;
+      lastSmtpError = null;
       return true;
     } catch (err) {
       lastError = err;
+      lastSmtpError = err.message || 'Failed to send email';
       logger.error('Email send attempt failed', {
         to,
         attempt,
         error: err.message,
+        code: err.code,
+        responseCode: err.responseCode,
       });
       resetTransporter();
       if (attempt < 3) await sleep(800 * attempt);
@@ -103,11 +109,14 @@ const verifySmtp = async () => {
       'SMTP NOT CONFIGURED — order emails will fail. Set MAIL_HOST, MAIL_USER, MAIL_PASS, ADMIN_EMAIL'
     );
     smtpReady = false;
+    lastSmtpError =
+      'Email is not configured. Set MAIL_HOST, MAIL_USER, MAIL_PASS, ADMIN_EMAIL';
     return false;
   }
   try {
     await getTransporter().verify();
     smtpReady = true;
+    lastSmtpError = null;
     logger.info('SMTP verified OK', {
       host: emailConfig.host,
       user: emailConfig.auth.user,
@@ -115,10 +124,13 @@ const verifySmtp = async () => {
     return true;
   } catch (err) {
     smtpReady = false;
+    lastSmtpError = err.message || 'SMTP verify failed';
     logger.error(
       'SMTP verify FAILED — use a Gmail App Password (not normal password)',
       {
         error: err.message,
+        code: err.code,
+        responseCode: err.responseCode,
         host: emailConfig.host,
         user: emailConfig.auth.user,
       }
@@ -184,4 +196,13 @@ module.exports = {
   sendEmailNow,
   deliverEmail,
   isSmtpReady: () => smtpReady,
+  getSmtpStatus: () => ({
+    configured: emailConfig.isConfigured,
+    ready: smtpReady,
+    host: emailConfig.host,
+    user: emailConfig.auth.user
+      ? emailConfig.auth.user.replace(/(.{2}).+(@.+)/, '$1***$2')
+      : null,
+    lastError: lastSmtpError,
+  }),
 };

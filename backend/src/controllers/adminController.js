@@ -384,14 +384,26 @@ exports.resetPasswordWithOTP = async (req, res) => {
         admin.resetPasswordExpires = null;
         await admin.save();
 
-        // Send confirmation email
-        console.log('📧 Sending password changed confirmation...');
-        await sendPasswordChangedEmail(email);
+        // Password is already saved — do not fail the request if mail fails
+        let emailSent = false;
+        let emailError = null;
+        try {
+            console.log('📧 Sending password changed confirmation...');
+            await sendPasswordChangedEmail(email);
+            emailSent = true;
+        } catch (mailErr) {
+            emailError = mailErr.message || 'Failed to send confirmation email';
+            console.error('❌ Password-changed email failed:', emailError);
+        }
 
         console.log('✅ Password reset successfully for:', email);
         res.json({
             success: true,
-            message: 'Password reset successfully'
+            message: emailSent
+                ? 'Password reset successfully'
+                : 'Password reset successfully, but confirmation email failed',
+            emailSent,
+            emailError,
         });
     } catch (error) {
         console.error('❌ Reset password with OTP error:', error);
@@ -468,10 +480,24 @@ exports.changePassword = async (req, res) => {
         admin.password = newPassword;
         await admin.save();
 
+        let emailSent = false;
+        let emailError = null;
+        try {
+            await sendPasswordChangedEmail(admin.email);
+            emailSent = true;
+        } catch (mailErr) {
+            emailError = mailErr.message || 'Failed to send confirmation email';
+            console.error('❌ Password-changed email failed:', emailError);
+        }
+
         console.log('✅ Password changed successfully for:', admin.email);
         res.json({
             success: true,
-            message: 'Password changed successfully'
+            message: emailSent
+                ? 'Password changed successfully'
+                : 'Password changed, but confirmation email failed',
+            emailSent,
+            emailError,
         });
     } catch (error) {
         console.error('❌ Change password error:', error);
