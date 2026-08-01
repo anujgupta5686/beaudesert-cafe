@@ -26,6 +26,12 @@ const buildTransporter = () => {
     /gmail\.com/i.test(emailConfig.host || '') ||
     /@gmail\.com$/i.test(emailConfig.auth.user || '');
 
+  const timeouts = {
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 30_000,
+  };
+
   // Gmail "service" mode is more reliable than raw host/port on some hosts
   if (isGmail) {
     return nodemailer.createTransport({
@@ -34,6 +40,7 @@ const buildTransporter = () => {
         user: emailConfig.auth.user,
         pass: emailConfig.auth.pass,
       },
+      ...timeouts,
     });
   }
 
@@ -43,9 +50,7 @@ const buildTransporter = () => {
     secure: emailConfig.secure,
     requireTLS: emailConfig.requireTLS,
     auth: emailConfig.auth,
-    connectionTimeout: 25_000,
-    greetingTimeout: 25_000,
-    socketTimeout: 40_000,
+    ...timeouts,
   });
 };
 
@@ -114,7 +119,15 @@ const verifySmtp = async () => {
     return false;
   }
   try {
-    await getTransporter().verify();
+    // Hard cap so Render/free hosts that block SMTP don't hang forever
+    await Promise.race([
+      getTransporter().verify(),
+      sleep(25_000).then(() => {
+        throw new Error(
+          'SMTP verify timed out (25s). Host may block outbound SMTP — use EC2 or an HTTPS email API (Resend/Brevo/SendGrid).'
+        );
+      }),
+    ]);
     smtpReady = true;
     lastSmtpError = null;
     logger.info('SMTP verified OK', {
@@ -126,7 +139,7 @@ const verifySmtp = async () => {
     smtpReady = false;
     lastSmtpError = err.message || 'SMTP verify failed';
     logger.error(
-      'SMTP verify FAILED — use a Gmail App Password (not normal password)',
+      'SMTP verify FAILED — use a Gmail App Password (not normal password), or deploy on EC2 / use Resend',
       {
         error: err.message,
         code: err.code,
