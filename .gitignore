@@ -8,3 +8,6 @@ build/
 *.log
 .vscode/
 .idea/
+# Local-only notes (do not commit)
+DEPLOYMENT_FULL_GUIDE.md
+*.env.bak*

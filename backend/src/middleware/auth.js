@@ -4,54 +4,66 @@ const Admin = require('../models/Admin');
 console.log('🔧 Loading Auth Middleware...');
 
 const verifyToken = async (req, res, next) => {
-    console.log('🔐 Verifying token...');
-
     try {
         const token = req.headers.authorization?.split(' ')[1];
 
         if (!token) {
-            console.log('❌ No token provided');
             return res.status(401).json({
                 success: false,
-                message: 'No token provided. Please login.'
+                code: 'NO_TOKEN',
+                message: 'No token provided. Please login.',
             });
         }
 
-        console.log('📝 Token found, verifying...');
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        console.log('✅ Token verified, admin ID:', decoded.id);
-
         const admin = await Admin.findById(decoded.id).select('-password');
 
         if (!admin) {
-            console.log('❌ Admin not found');
             return res.status(401).json({
                 success: false,
-                message: 'Admin not found. Please login again.'
+                code: 'ADMIN_NOT_FOUND',
+                message: 'Admin not found. Please login again.',
             });
         }
 
-        console.log('✅ Admin found:', admin.email);
+        if (!admin.isActive) {
+            return res.status(403).json({
+                success: false,
+                code: 'ACCOUNT_DISABLED',
+                message: 'Account is deactivated. Please contact support.',
+            });
+        }
+
+        // Single-device: reject tokens from a previous login after a new device logs in
+        if (!decoded.sid || !admin.sessionId || decoded.sid !== admin.sessionId) {
+            return res.status(401).json({
+                success: false,
+                code: 'SESSION_REPLACED',
+                message:
+                    'You were logged out because this account signed in on another device.',
+            });
+        }
+
         req.admin = admin;
         next();
     } catch (error) {
-        console.error('❌ Token verification error:', error.message);
-
         if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({
                 success: false,
-                message: 'Invalid token. Please login again.'
+                code: 'INVALID_TOKEN',
+                message: 'Invalid token. Please login again.',
             });
         }
         if (error.name === 'TokenExpiredError') {
             return res.status(401).json({
                 success: false,
-                message: 'Token expired. Please login again.'
+                code: 'TOKEN_EXPIRED',
+                message: 'Token expired. Please login again.',
             });
         }
         return res.status(500).json({
             success: false,
-            message: 'Authentication error.'
+            message: 'Authentication error.',
         });
     }
 };

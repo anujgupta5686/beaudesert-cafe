@@ -35,7 +35,12 @@ const adminSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
-    }
+    },
+    /** Single-device login: only JWT with this sessionId stays valid */
+    sessionId: {
+        type: String,
+        default: null,
+    },
 }, {
     timestamps: true
 });

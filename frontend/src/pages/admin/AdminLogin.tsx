@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { useNavigate, Link, useSearchParams } from "react-router-dom"
 import { useAppDispatch, useAppSelector } from "@/store/hooks"
 import { loginAdmin, clearError } from "@/store/slices/authSlice"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { toast } from "sonner"
 
 const AdminLogin = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const dispatch = useAppDispatch()
   const { isAuthenticated, isLoading, error } = useAppSelector(
     (state) => state.auth
@@ -28,6 +29,21 @@ const AdminLogin = () => {
       navigate("/admin/dashboard")
     }
   }, [isAuthenticated, navigate])
+
+  // Other-device login / session expired message
+  useEffect(() => {
+    const reason = searchParams.get("reason")
+    if (!reason) return
+    if (reason === "session_replaced") {
+      toast.error(
+        "Logged out: this account signed in on another device."
+      )
+    } else if (reason === "auth") {
+      toast.error("Session expired. Please sign in again.")
+    }
+    searchParams.delete("reason")
+    setSearchParams(searchParams, { replace: true })
+  }, [searchParams, setSearchParams])
 
   // Handle login error
   useEffect(() => {
