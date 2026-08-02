@@ -27,25 +27,53 @@ initQueue().catch((err) =>
 const app = express();
 const PORT = env.port;
 
+// Behind Nginx / load balancer (correct IPs + HTTPS detection)
+app.set('trust proxy', 1);
+
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
+/** Expand a site URL to http/https + www/non-www variants */
+const expandOrigin = (raw) => {
+  if (!raw) return [];
+  const base = String(raw).trim().replace(/\/$/, '');
+  if (!base) return [];
+  let host = base;
+  try {
+    host = new URL(base.includes('://') ? base : `https://${base}`).host;
+  } catch {
+    host = base.replace(/^https?:\/\//, '');
+  }
+  const bare = host.replace(/^www\./, '');
+  return [
+    `https://${bare}`,
+    `https://www.${bare}`,
+    `http://${bare}`,
+    `http://www.${bare}`,
+  ];
+};
+
 /** Build allowed CORS origins from env + safe defaults */
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'https://beaudesertcafe.com',
+  'https://www.beaudesertcafe.com',
+  'http://beaudesertcafe.com',
+  'http://www.beaudesertcafe.com',
   'https://beaudesert-cafe-frontend.vercel.app',
   'https://beaudesert-cafe-frontend.onrender.com',
 ];
 const envOrigins = [
-  env.frontendUrl,
+  ...expandOrigin(env.frontendUrl),
   ...(process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((o) => o.trim())
-    .filter(Boolean),
+    .filter(Boolean)
+    .flatMap((o) => expandOrigin(o)),
 ];
 const allowedOrigins = [
   ...new Set([...defaultOrigins, ...envOrigins].filter(Boolean)),
@@ -54,6 +82,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
+      // Same-origin /api proxy and mobile apps may omit Origin
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }

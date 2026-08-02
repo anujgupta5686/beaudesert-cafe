@@ -15,9 +15,9 @@ git pull origin main
 
 echo "==> Backend install + restart"
 cd "$APP_DIR/backend"
-npm ci --omit=dev
+npm ci --omit=dev || npm install --omit=dev
 if ! pm2 describe cafe-api >/dev/null 2>&1; then
-  pm2 start index.js --name cafe-api
+  pm2 start ecosystem.config.cjs
 else
   pm2 restart cafe-api --update-env
 fi
@@ -26,12 +26,12 @@ pm2 save
 echo "==> Frontend build"
 cd "$APP_DIR/frontend"
 if [ ! -f .env.production ]; then
-  echo "ERROR: missing frontend/.env.production"
-  echo "Create it with: VITE_API_URL=https://api.YOUR_DOMAIN/api"
-  exit 1
+  echo "VITE_API_URL=/api" > .env.production
+  echo "Created frontend/.env.production with VITE_API_URL=/api"
 fi
-npm ci
+npm install
 npm run build
+chmod -R o+rX dist 2>/dev/null || true
 
 echo "==> Reload nginx (if configured)"
 if command -v nginx >/dev/null 2>&1; then

@@ -1,15 +1,22 @@
+const crypto = require('crypto');
 const Admin = require('../models/Admin');
 const jwt = require('jsonwebtoken');
 const { sendPasswordResetOTP, sendPasswordChangedEmail } = require('../utils/email');
 
 console.log('🔧 Loading Admin Controller...');
 
-// Generate JWT Token
-const generateToken = (id) => {
-    const token = jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+// JWT includes session id (sid) for single-device login
+const generateToken = (id, sessionId) => {
+    const token = jwt.sign(
+        { id, sid: sessionId },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+    );
     console.log('🔑 Token generated for admin ID:', id);
     return token;
 };
+
+const newSessionId = () => crypto.randomBytes(24).toString('hex');
 
 // Register Admin (First time setup)
 exports.registerAdmin = async (req, res) => {
@@ -131,8 +138,12 @@ exports.loginAdmin = async (req, res) => {
             });
         }
 
-        // Generate token
-        const token = generateToken(admin._id);
+        // New session invalidates any previous device's JWT
+        const sessionId = newSessionId();
+        admin.sessionId = sessionId;
+        await admin.save();
+
+        const token = generateToken(admin._id, sessionId);
 
         console.log('✅ Login successful for:', admin.email);
         res.json({
@@ -414,14 +425,32 @@ exports.resetPasswordWithOTP = async (req, res) => {
     }
 };
 
-// Logout
+// Logout — clear active session so this token (and any stale copy) stops working
 exports.logoutAdmin = async (req, res) => {
-    console.log('📝 LOGOUT - Request received');
-
-    res.json({
-        success: true,
-        message: 'Logged out successfully'
-    });
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (token) {
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                if (decoded?.id) {
+                    await Admin.findByIdAndUpdate(decoded.id, {
+                        sessionId: null,
+                    });
+                }
+            } catch {
+                // ignore expired/invalid token on logout
+            }
+        }
+        res.json({
+            success: true,
+            message: 'Logged out successfully',
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
 };
 
 // ============================================

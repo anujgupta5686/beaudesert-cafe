@@ -37,10 +37,21 @@ export const loginAdmin = createAsyncThunk(
 )
 
 export const logoutAdmin = createAsyncThunk("auth/logout", async () => {
-  await axios.post("/admin/logout")
+  try {
+    await axios.post("/admin/logout")
+  } catch {
+    // Still clear local session if API is unreachable
+  }
   localStorage.removeItem("adminToken")
   localStorage.removeItem("adminData")
 })
+
+const clearSession = (state: AuthState) => {
+  state.admin = null
+  state.token = null
+  state.isAuthenticated = false
+  state.error = null
+}
 
 const authSlice = createSlice({
   name: "auth",
@@ -70,14 +81,10 @@ const authSlice = createSlice({
       })
       .addCase(loginAdmin.rejected, (state, action) => {
         state.isLoading = false
-        state.error = action.payload as string // ✅ Error is set here
+        state.error = action.payload as string
       })
-      .addCase(logoutAdmin.fulfilled, (state) => {
-        state.admin = null
-        state.token = null
-        state.isAuthenticated = false
-        state.error = null
-      })
+      .addCase(logoutAdmin.fulfilled, clearSession)
+      .addCase(logoutAdmin.rejected, clearSession)
   },
 })
 
